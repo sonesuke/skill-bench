@@ -1,0 +1,25 @@
+[tasks.format]
+description = "Format Rust code"
+run = "cargo fmt"
+
+[tasks.fmt]
+alias = "format"
+
+[tasks.lint]
+description = "Run Rust linter (clippy)"
+run = "cargo clippy -- -D warnings"
+
+[tasks.test]
+description = "Run tests"
+run = "cargo test"
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = "cargo clean"
+
+[tasks.pre-commit]
+description = "Run pre-commit checks (fmt, lint)"
+run = """
+cargo fmt --check
+cargo clippy -- -D warnings
+"""
