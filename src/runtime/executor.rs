@@ -19,8 +19,8 @@ pub struct TestExecutor {
     claude_path: PathBuf,
     _plugin_temp_dir: Option<tempfile::TempDir>, // Kept alive for lifetime of TestExecutor
     harness_plugin: Arc<PathBuf>,
+    test_plugin_dir: Option<PathBuf>,
     log_output_dir: Option<PathBuf>,
-    skills_dir: Option<PathBuf>,
 }
 
 impl TestExecutor {
@@ -28,37 +28,30 @@ impl TestExecutor {
     pub fn new(
         threads: usize,
         log_output_dir: Option<String>,
-        skills_dir: Option<String>,
         plugin_dir: Option<String>,
     ) -> Result<Self> {
         // Find claude binary
         let claude_path = which::which("claude").unwrap_or_else(|_| PathBuf::from("claude"));
 
-        // Use specified plugin_dir or extract embedded harness plugin
-        let (temp_dir, plugin_path) = if let Some(dir) = plugin_dir {
-            let plugin_path = PathBuf::from(&dir);
-            if !plugin_path.exists() {
-                anyhow::bail!("Plugin directory does not exist: {}", dir);
-            }
-            (None, plugin_path)
-        } else {
-            let (temp_dir, plugin_dir) = extract_harness_plugin()?;
-            (Some(temp_dir), plugin_dir)
-        };
+        // Extract harness plugin (always needed for question-responder)
+        let (harness_temp, harness_plugin_path) = extract_harness_plugin()?;
+
+        // Parse test plugin dir from --plugin-dir
+        let test_plugin_dir = plugin_dir
+            .filter(|d| !d.is_empty())
+            .map(PathBuf::from)
+            .filter(|p| p.exists());
 
         // Parse log output directory
         let log_output_dir = log_output_dir.filter(|d| !d.is_empty()).map(PathBuf::from);
 
-        // Parse skills directory
-        let skills_dir = skills_dir.filter(|d| !d.is_empty()).map(PathBuf::from);
-
         Ok(Self {
             threads,
             claude_path,
-            _plugin_temp_dir: temp_dir,
-            harness_plugin: Arc::new(plugin_path),
+            _plugin_temp_dir: Some(harness_temp),
+            harness_plugin: Arc::new(harness_plugin_path),
+            test_plugin_dir,
             log_output_dir,
-            skills_dir,
         })
     }
 
@@ -108,39 +101,15 @@ impl TestExecutor {
             }
         };
 
-        // Copy skills and agents from skills_dir to .claude/
-        if let Some(ref skills_dir) = self.skills_dir {
-            // Create .claude directory in workspace
-            let claude_dir = workspace.path().join(".claude");
-            if let Err(e) = std::fs::create_dir_all(&claude_dir) {
-                warn!(
-                    "Failed to create .claude directory for {}: {}",
-                    desc.test_id, e
-                );
-            }
-
-            // Copy skills/
-            let skills_src = skills_dir.join("skills");
-            if skills_src.exists() {
-                if let Err(e) = fs_extra::copy_items(
-                    &[skills_src.as_path()],
-                    &claude_dir,
-                    &fs_extra::dir::CopyOptions::new(),
-                ) {
-                    warn!("Failed to copy skills for {}: {}", desc.test_id, e);
-                }
-            }
-
-            // Copy agents/
-            let agents_src = skills_dir.join("agents");
-            if agents_src.exists() {
-                if let Err(e) = fs_extra::copy_items(
-                    &[agents_src.as_path()],
-                    &claude_dir,
-                    &fs_extra::dir::CopyOptions::new(),
-                ) {
-                    warn!("Failed to copy agents for {}: {}", desc.test_id, e);
-                }
+        // Copy test plugin to workspace
+        if let Some(ref plugin_dir) = self.test_plugin_dir {
+            // Copy entire plugin directory (including .claude-plugin/) to workspace
+            if let Err(e) = fs_extra::copy_items(
+                &[plugin_dir.as_path()],
+                workspace.path(),
+                &fs_extra::dir::CopyOptions::new().content_only(true),
+            ) {
+                warn!("Failed to copy test plugin for {}: {}", desc.test_id, e);
             }
         }
 
