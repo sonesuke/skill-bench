@@ -4,6 +4,7 @@ mod models;
 mod output;
 mod runtime;
 mod state;
+mod timeline;
 
 use anyhow::Result;
 use clap::Parser;
@@ -58,6 +59,9 @@ async fn main() -> Result<()> {
         }
         Commands::List { pattern } => {
             list_tests(pattern)?;
+        }
+        Commands::Timeline { log_file, verbose } => {
+            timeline::display_timeline(&log_file, verbose)?;
         }
     }
 
