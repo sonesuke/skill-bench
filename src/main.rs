@@ -12,6 +12,16 @@ use models::TestRunSummary;
 use runtime::{TestDiscovery, TestExecutor};
 use state::TestHistory;
 
+/// Configuration for running tests
+struct TestConfig {
+    pattern: String,
+    filter: Option<String>,
+    skill: Option<String>,
+    rerun_failed: bool,
+    threads: usize,
+    log: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize tracing
@@ -31,18 +41,17 @@ async fn main() -> Result<()> {
             skill,
             rerun_failed,
             threads,
-            log_level,
-            format,
+            log,
         } => {
-            run_tests(
+            let config = TestConfig {
                 pattern,
                 filter,
                 skill,
                 rerun_failed,
                 threads,
-                log_level,
-                format,
-            )?;
+                log,
+            };
+            run_tests(config)?;
         }
         Commands::List { pattern } => {
             list_tests(pattern)?;
@@ -52,35 +61,27 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn run_tests(
-    pattern: String,
-    filter: Option<String>,
-    skill: Option<String>,
-    rerun_failed: bool,
-    threads: usize,
-    _log_level: cli::LogLevel,
-    _format: cli::OutputFormat,
-) -> Result<()> {
+fn run_tests(config: TestConfig) -> Result<()> {
     // Discover tests
-    let discovery = TestDiscovery::new(pattern);
+    let discovery = TestDiscovery::new(config.pattern);
     let mut tests = discovery.discover()?;
 
     println!("Discovered {} tests", tests.len());
 
     // Apply filters
-    if let Some(skill_name) = skill {
+    if let Some(skill_name) = config.skill {
         tests.retain(|t| t.skill_name == skill_name);
         println!("Filtered by skill: {}", skill_name);
     }
 
-    if let Some(filter_pattern) = filter {
+    if let Some(filter_pattern) = config.filter {
         let regex = regex::Regex::new(&filter_pattern)?;
         tests.retain(|t| regex.is_match(&t.test_name));
         println!("Filtered by pattern: {}", filter_pattern);
     }
 
     // Handle --rerun-failed
-    if rerun_failed {
+    if config.rerun_failed {
         let history = TestHistory::load();
         let failed_ids = history.get_failed_test_ids();
 
@@ -107,7 +108,7 @@ fn run_tests(
     println!();
 
     // Execute tests
-    let executor = TestExecutor::new(threads)?;
+    let executor = TestExecutor::new(config.threads, Some(config.log.clone()))?;
     let results = executor.execute_tests(tests)?;
 
     // Create summary

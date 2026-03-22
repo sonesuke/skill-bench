@@ -38,11 +38,20 @@ skill-bench list
 ### Run tests
 
 ```bash
-# Run all tests
+# Run all tests (uses default pattern: cases)
 skill-bench run
 
-# Filter by pattern
+# Run tests from specific directory (automatically finds all .toml files)
+skill-bench run "cases"
+skill-bench run "cases/concept-interviewing"
+
+# Or use explicit glob pattern
+skill-bench run "cases/**/*.toml"
+
+# Filter by test name (regex)
 skill-bench run --filter "functional-.*"
+
+# Filter by skill name
 skill-bench run --skill investigation-recording
 
 # Rerun only failed tests
@@ -51,9 +60,31 @@ skill-bench run --rerun-failed
 # Specify parallel threads
 skill-bench run --threads 4
 
-# Log level
-skill-bench run --log-level all      # Show all tests
-skill-bench run --log-level fail     # Show failures only
+# Persist Claude session logs to directory
+skill-bench run --log logs    # Save logs to logs/ directory
+skill-bench run -l .          # Short form: save to current directory
+```
+
+### Test Pattern Syntax
+
+The pattern argument accepts either a directory or glob pattern:
+
+- `cases` - All TOML files recursively under `cases/` (directory mode)
+- `cases/concept-interviewing` - All TOML files in a specific subdirectory
+- `cases/**/*.toml` - Explicit glob pattern for all TOML files recursively
+- `cases/*/*.toml` - TOML files only in immediate subdirectories
+- `cases/functional-*.toml` - TOML files matching a specific pattern
+
+When a directory is specified, all `.toml` files are automatically found recursively.
+
+### List tests
+
+```bash
+# List all tests (uses default pattern: cases)
+skill-bench list
+
+# List tests from specific directory
+skill-bench list "cases/concept-interviewing"
 ```
 
 ## Directory Structure

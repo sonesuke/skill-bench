@@ -2,4 +2,4 @@
 
 mod args;
 
-pub use args::{Cli, Commands, LogLevel, OutputFormat};
+pub use args::{Cli, Commands};
