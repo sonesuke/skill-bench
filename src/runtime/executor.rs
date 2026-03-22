@@ -7,6 +7,8 @@ use crate::runtime::workspace::TestWorkspace;
 use anyhow::Result;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
+use serde_json::Value;
+use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
@@ -34,29 +36,28 @@ impl TestExecutor {
         // Find claude binary
         let claude_path = which::which("claude").unwrap_or_else(|_| PathBuf::from("claude"));
 
-        // Use specified plugin_dir or extract embedded harness plugin
-        let (temp_dir, plugin_path) = if let Some(dir) = plugin_dir {
-            let plugin_path = PathBuf::from(&dir);
-            if !plugin_path.exists() {
-                anyhow::bail!("Plugin directory does not exist: {}", dir);
-            }
-            (None, plugin_path)
-        } else {
-            let (temp_dir, plugin_dir) = extract_harness_plugin()?;
-            (Some(temp_dir), plugin_dir)
-        };
+        // Always extract harness plugin (we'll merge skills_dir into it later if specified)
+        let (temp_dir, harness_plugin_path) = extract_harness_plugin()?;
 
         // Parse log output directory
         let log_output_dir = log_output_dir.filter(|d| !d.is_empty()).map(PathBuf::from);
 
-        // Parse skills directory
-        let skills_dir = skills_dir.filter(|d| !d.is_empty()).map(PathBuf::from);
+        // Parse skills directory (plugin_dir option is actually the skills directory)
+        let skills_dir = if let Some(dir) = plugin_dir {
+            let path = PathBuf::from(&dir);
+            if !path.exists() {
+                anyhow::bail!("Plugin directory does not exist: {}", dir);
+            }
+            Some(path)
+        } else {
+            skills_dir.filter(|d| !d.is_empty()).map(PathBuf::from)
+        };
 
         Ok(Self {
             threads,
             claude_path,
-            _plugin_temp_dir: temp_dir,
-            harness_plugin: Arc::new(plugin_path),
+            _plugin_temp_dir: Some(temp_dir),
+            harness_plugin: Arc::new(harness_plugin_path),
             log_output_dir,
             skills_dir,
         })
@@ -108,38 +109,71 @@ impl TestExecutor {
             }
         };
 
-        // Copy skills and agents from skills_dir to .claude/
+        // Merge skills_dir into harness plugin (so they load together via --plugin-dir)
         if let Some(ref skills_dir) = self.skills_dir {
-            // Create .claude directory in workspace
-            let claude_dir = workspace.path().join(".claude");
-            if let Err(e) = std::fs::create_dir_all(&claude_dir) {
-                warn!(
-                    "Failed to create .claude directory for {}: {}",
-                    desc.test_id, e
-                );
-            }
-
-            // Copy skills/
+            // Copy skills/ contents (not the directory itself)
             let skills_src = skills_dir.join("skills");
+            let harness_skills = self.harness_plugin.join("skills");
             if skills_src.exists() {
-                if let Err(e) = fs_extra::copy_items(
-                    &[skills_src.as_path()],
-                    &claude_dir,
-                    &fs_extra::dir::CopyOptions::new(),
-                ) {
-                    warn!("Failed to copy skills for {}: {}", desc.test_id, e);
+                // Read the contents of skills_src and copy each item
+                if let Ok(entries) = std::fs::read_dir(&skills_src) {
+                    let items: Vec<_> = entries
+                        .filter_map(|e| e.ok())
+                        .map(|e| e.path())
+                        .collect();
+
+                    if !items.is_empty() {
+                        let mut copy_options = fs_extra::dir::CopyOptions::new();
+                        copy_options.overwrite = true;
+
+                        if let Err(e) = fs_extra::copy_items(
+                            &items.iter().map(|p| p.as_path()).collect::<Vec<_>>(),
+                            &harness_skills,
+                            &copy_options,
+                        ) {
+                            // Ignore EEXIST errors (files already copied by another test)
+                            if !e.to_string().contains("File exists") && !e.to_string().contains("os error 17") {
+                                warn!("Failed to merge skills for {}: {}", desc.test_id, e);
+                            }
+                        }
+                    }
                 }
             }
 
-            // Copy agents/
+            // Copy agents/ contents
             let agents_src = skills_dir.join("agents");
+            let harness_agents = self.harness_plugin.join("agents");
             if agents_src.exists() {
-                if let Err(e) = fs_extra::copy_items(
-                    &[agents_src.as_path()],
-                    &claude_dir,
-                    &fs_extra::dir::CopyOptions::new(),
-                ) {
-                    warn!("Failed to copy agents for {}: {}", desc.test_id, e);
+                if let Ok(entries) = std::fs::read_dir(&agents_src) {
+                    let items: Vec<_> = entries
+                        .filter_map(|e| e.ok())
+                        .map(|e| e.path())
+                        .collect();
+
+                    if !items.is_empty() {
+                        let mut copy_options = fs_extra::dir::CopyOptions::new();
+                        copy_options.overwrite = true;
+
+                        if let Err(e) = fs_extra::copy_items(
+                            &items.iter().map(|p| p.as_path()).collect::<Vec<_>>(),
+                            &harness_agents,
+                            &copy_options,
+                        ) {
+                            // Ignore EEXIST errors (files already copied by another test)
+                            if !e.to_string().contains("File exists") && !e.to_string().contains("os error 17") {
+                                warn!("Failed to merge agents for {}: {}", desc.test_id, e);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Merge mcpServers and name from skills_dir plugin.json into harness plugin.json
+            let src_plugin_json = skills_dir.join(".claude-plugin/plugin.json");
+            let harness_plugin_json = self.harness_plugin.join(".claude-plugin/plugin.json");
+            if src_plugin_json.exists() && harness_plugin_json.exists() {
+                if let Err(e) = merge_plugin_json(&harness_plugin_json, &src_plugin_json) {
+                    warn!("Failed to merge plugin.json for {}: {}", desc.test_id, e);
                 }
             }
         }
@@ -309,4 +343,34 @@ impl TestExecutor {
             }
         }
     }
+}
+
+/// Merge mcpServers and name from src_plugin_json into harness_plugin_json
+fn merge_plugin_json(harness_path: &PathBuf, src_path: &PathBuf) -> Result<()> {
+    // Read both plugin.json files
+    let harness_content = fs::read_to_string(harness_path)?;
+    let src_content = fs::read_to_string(src_path)?;
+
+    let mut harness_json: Value = serde_json::from_str(&harness_content)?;
+    let src_json: Value = serde_json::from_str(&src_content)?;
+
+    // Use name from source plugin (so skills get correct prefix)
+    if let Some(src_name) = src_json.get("name").and_then(|v| v.as_str()) {
+        harness_json["name"] = Value::String(src_name.to_string());
+    }
+
+    // Merge mcpServers
+    if let Some(src_mcp) = src_json.get("mcpServers").and_then(|v| v.as_object()) {
+        if let Some(harness_mcp) = harness_json.get_mut("mcpServers").and_then(|v| v.as_object_mut()) {
+            for (key, value) in src_mcp {
+                harness_mcp.insert(key.clone(), value.clone());
+            }
+        }
+    }
+
+    // Write merged content back
+    let merged = serde_json::to_string_pretty(&harness_json)?;
+    fs::write(harness_path, merged)?;
+
+    Ok(())
 }
