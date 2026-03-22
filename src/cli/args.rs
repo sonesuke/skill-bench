@@ -16,8 +16,8 @@ pub struct Cli {
 pub enum Commands {
     /// Run tests
     Run {
-        /// Test pattern (glob, e.g., "cases/*/*.toml")
-        #[arg(default_value = "cases/*/*.toml")]
+        /// Test pattern (directory or glob, e.g., "cases" or "cases/**/*.toml")
+        #[arg(default_value = "cases")]
         pattern: String,
 
         /// Filter by test name (regex)
@@ -46,8 +46,8 @@ pub enum Commands {
     },
     /// List discovered tests
     List {
-        /// Test pattern (glob, e.g., "cases/*/*.toml")
-        #[arg(default_value = "cases/*/*.toml")]
+        /// Test pattern (directory or glob, e.g., "cases" or "cases/**/*.toml")
+        #[arg(default_value = "cases")]
         pattern: String,
     },
 }
