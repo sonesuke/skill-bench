@@ -132,7 +132,10 @@ impl AssertionChecker {
             _ => Err(format!("Unknown check command: {}", cmd)),
         };
 
-        if should_deny {
+        // Skip double inversion for checks that handle deny internally
+        let needs_inversion =
+            should_deny && !matches!(cmd.as_str(), "skill-invoked" | "file-contains");
+        if needs_inversion {
             match result {
                 Ok(_) => Err("Check passed but was marked as deny".to_string()),
                 Err(_) => Ok(()),
