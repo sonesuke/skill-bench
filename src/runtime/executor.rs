@@ -19,6 +19,7 @@ pub struct TestExecutor {
     claude_path: PathBuf,
     _plugin_temp_dir: Option<tempfile::TempDir>, // Kept alive for lifetime of TestExecutor
     harness_plugin: Arc<PathBuf>,
+    target_plugin_dir: Option<PathBuf>,
     log_output_dir: Option<PathBuf>,
     skills_dir: Option<PathBuf>,
 }
@@ -30,6 +31,7 @@ impl TestExecutor {
         log_output_dir: Option<String>,
         skills_dir: Option<String>,
         plugin_dir: Option<String>,
+        target_plugin_dir: Option<String>,
     ) -> Result<Self> {
         // Find claude binary
         let claude_path = which::which("claude").unwrap_or_else(|_| PathBuf::from("claude"));
@@ -52,11 +54,17 @@ impl TestExecutor {
         // Parse skills directory
         let skills_dir = skills_dir.filter(|d| !d.is_empty()).map(PathBuf::from);
 
+        // Parse target plugin directory
+        let target_plugin_dir = target_plugin_dir
+            .filter(|d| !d.is_empty())
+            .map(PathBuf::from);
+
         Ok(Self {
             threads,
             claude_path,
             _plugin_temp_dir: temp_dir,
             harness_plugin: Arc::new(plugin_path),
+            target_plugin_dir,
             log_output_dir,
             skills_dir,
         })
@@ -260,18 +268,31 @@ impl TestExecutor {
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("Invalid plugin path"))?;
 
+        // Build command args
+        let mut args = vec![
+            "-p",
+            "--dangerously-skip-permissions",
+            "--verbose",
+            "--output-format",
+            "stream-json",
+            "--plugin-dir",
+            plugin_dir,
+        ];
+
+        // Add target plugin dir if specified
+        if let Some(ref target_dir) = self.target_plugin_dir {
+            let target_dir_str = target_dir
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("Invalid target plugin path"))?;
+            args.push("--plugin-dir");
+            args.push(target_dir_str);
+        }
+
+        args.push("--");
+        args.push(test.test_prompt.trim());
+
         let mut child = Command::new(&self.claude_path)
-            .args([
-                "-p",
-                "--dangerously-skip-permissions",
-                "--verbose",
-                "--output-format",
-                "stream-json",
-                "--plugin-dir",
-                plugin_dir,
-                "--",
-                test.test_prompt.trim(),
-            ])
+            .args(&args)
             .current_dir(workspace.path())
             .env("CLAUDECODE", "") // Unset to avoid nested session
             .env("SKILL_BENCH_TEST", "1")

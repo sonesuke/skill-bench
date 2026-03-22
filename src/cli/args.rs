@@ -39,9 +39,13 @@ pub enum Commands {
         #[arg(short, long)]
         skills_dir: Option<String>,
 
-        /// Plugin directory to install (contains .claude-plugin/)
+        /// Harness plugin directory (contains .claude-plugin/)
         #[arg(long)]
         plugin_dir: Option<String>,
+
+        /// Test target plugin directory (contains .claude-plugin/)
+        #[arg(long)]
+        target_plugin_dir: Option<String>,
 
         /// Log output directory for Claude session logs
         #[arg(short, long, default_value = "")]
