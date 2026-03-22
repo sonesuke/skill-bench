@@ -37,8 +37,8 @@ pub enum Commands {
         threads: usize,
 
         /// Log output directory for Claude session logs
-        #[arg(long, default_value = "")]
-        log_output: String,
+        #[arg(short, long, default_value = "")]
+        log: String,
 
         /// Log level
         #[arg(long, default_value = "fail")]

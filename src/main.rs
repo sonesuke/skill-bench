@@ -13,14 +13,13 @@ use runtime::{TestDiscovery, TestExecutor};
 use state::TestHistory;
 
 /// Configuration for running tests
-#[allow(dead_code)]
 struct TestConfig {
     pattern: String,
     filter: Option<String>,
     skill: Option<String>,
     rerun_failed: bool,
     threads: usize,
-    log_output: String,
+    log: String,
     log_level: cli::LogLevel,
     format: cli::OutputFormat,
 }
@@ -44,7 +43,7 @@ async fn main() -> Result<()> {
             skill,
             rerun_failed,
             threads,
-            log_output,
+            log,
             log_level,
             format,
         } => {
@@ -54,7 +53,7 @@ async fn main() -> Result<()> {
                 skill,
                 rerun_failed,
                 threads,
-                log_output,
+                log,
                 log_level,
                 format,
             };
@@ -115,14 +114,26 @@ fn run_tests(config: TestConfig) -> Result<()> {
     println!();
 
     // Execute tests
-    let executor = TestExecutor::new(config.threads, Some(config.log_output))?;
+    let executor = TestExecutor::new(config.threads, Some(config.log.clone()))?;
     let results = executor.execute_tests(tests)?;
 
     // Create summary
     let summary = TestRunSummary::from_results(results);
 
-    // Print summary
-    print_summary(&summary);
+    // Output based on format
+    match config.format {
+        cli::OutputFormat::Json => {
+            println!("{}", serde_json::to_string_pretty(&summary)?);
+        }
+        cli::OutputFormat::Jsonl => {
+            for result in &summary.results {
+                println!("{}", serde_json::to_string(result)?);
+            }
+        }
+        cli::OutputFormat::Human => {
+            print_summary(&summary, &config.log_level);
+        }
+    }
 
     // Update history
     let mut history = TestHistory::load();
@@ -151,7 +162,7 @@ fn list_tests(pattern: String) -> Result<()> {
     Ok(())
 }
 
-fn print_summary(summary: &TestRunSummary) {
+fn print_summary(summary: &TestRunSummary, log_level: &cli::LogLevel) {
     println!();
     println!("═{}═", "═".repeat(50));
     println!("SkillBench Test Results");
@@ -162,8 +173,26 @@ fn print_summary(summary: &TestRunSummary) {
     );
     println!("Duration: {:.2}s", summary.duration.as_secs_f64());
 
+    // List passed tests if log_level is pass or all
+    if matches!(log_level, cli::LogLevel::Pass | cli::LogLevel::All)
+        && !summary.passed_results().is_empty()
+    {
+        println!();
+        println!("Passed Tests:");
+        for result in summary.passed_results() {
+            println!(
+                "  ✅ {}/{} ({:.2}s)",
+                result.skill_name,
+                result.test_name,
+                result.duration.as_secs_f64()
+            );
+        }
+    }
+
     // List failed tests
-    if !summary.failures().is_empty() {
+    if !summary.failures().is_empty()
+        && matches!(log_level, cli::LogLevel::Fail | cli::LogLevel::All)
+    {
         println!();
         println!("Failed Tests:");
         for failure in summary.failures() {
