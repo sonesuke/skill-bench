@@ -30,12 +30,7 @@ pub fn check_skill_loaded(checker: &AssertionChecker, skill_name: &str) -> Resul
 }
 
 /// Check if skill was invoked
-/// inverted: true means check that skill was NOT invoked
-pub fn check_skill_invoked(
-    checker: &AssertionChecker,
-    skill_name: &str,
-    inverted: bool,
-) -> Result<(), String> {
+pub fn check_skill_invoked(checker: &AssertionChecker, skill_name: &str) -> Result<(), String> {
     // Search log for skill invocation
     // Pattern: "Skill" tool_use with "skill":"patent-kit:<skill-name>"
     let found = checker
@@ -64,13 +59,9 @@ pub fn check_skill_invoked(
             })
         });
 
-    match (found, inverted) {
-        (true, false) => Ok(()),
-        (false, true) => Ok(()),
-        (true, true) => Err(format!(
-            "Skill '{}' was invoked but should not have been",
-            skill_name
-        )),
-        (false, false) => Err(format!("Skill '{}' was not invoked", skill_name)),
+    if found {
+        Ok(())
+    } else {
+        Err(format!("Skill '{}' was not invoked", skill_name))
     }
 }
