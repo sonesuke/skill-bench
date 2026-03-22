@@ -255,23 +255,41 @@ impl TestExecutor {
     fn execute_claude(&self, workspace: &TestWorkspace, test: &TestCase) -> Result<()> {
         let timeout = Duration::from_secs(test.timeout);
 
-        let plugin_dir = self
-            .harness_plugin
-            .to_str()
-            .ok_or_else(|| anyhow::anyhow!("Invalid plugin path"))?;
+        // Build command args
+        let mut args = vec![
+            "-p",
+            "--dangerously-skip-permissions",
+            "--verbose",
+            "--output-format",
+            "stream-json",
+        ];
+
+        // Add harness plugin only if test has [answers] section
+        if test.answers.is_some() {
+            let plugin_dir = self
+                .harness_plugin
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("Invalid plugin path"))?;
+            args.push("--plugin-dir");
+            args.push(plugin_dir);
+        }
+
+        // Check if workspace has .claude-plugin (test target plugin)
+        let workspace_plugin_dir = workspace.path().join(".claude-plugin");
+        if workspace_plugin_dir.exists() {
+            let workspace_dir = workspace
+                .path()
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("Invalid workspace path"))?;
+            args.push("--plugin-dir");
+            args.push(workspace_dir);
+        }
+
+        args.push("--");
+        args.push(test.test_prompt.trim());
 
         let mut child = Command::new(&self.claude_path)
-            .args([
-                "-p",
-                "--dangerously-skip-permissions",
-                "--verbose",
-                "--output-format",
-                "stream-json",
-                "--plugin-dir",
-                plugin_dir,
-                "--",
-                test.test_prompt.trim(),
-            ])
+            .args(&args)
             .current_dir(workspace.path())
             .env("CLAUDECODE", "") // Unset to avoid nested session
             .env("SKILL_BENCH_TEST", "1")
