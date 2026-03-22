@@ -103,13 +103,33 @@ impl TestExecutor {
 
         // Copy test plugin to workspace
         if let Some(ref plugin_dir) = self.test_plugin_dir {
-            // Copy entire plugin directory (including .claude-plugin/) to workspace
-            if let Err(e) = fs_extra::copy_items(
-                &[plugin_dir.as_path()],
-                workspace.path(),
-                &fs_extra::dir::CopyOptions::new().content_only(true),
-            ) {
-                warn!("Failed to copy test plugin for {}: {}", desc.test_id, e);
+            // Copy entire plugin directory contents (including .claude-plugin/) to workspace
+            // We need to copy the contents of plugin_dir to workspace, not plugin_dir itself
+            for entry in walkdir::WalkDir::new(plugin_dir)
+                .min_depth(1)
+                .into_iter()
+                .filter_map(|e| e.ok())
+            {
+                let src = entry.path();
+                let rel_path = src
+                    .strip_prefix(plugin_dir)
+                    .expect("Failed to get relative path");
+                let dest = workspace.path().join(rel_path);
+
+                if src.is_dir() {
+                    if let Err(e) = std::fs::create_dir_all(&dest) {
+                        warn!("Failed to create directory {:?}: {}", dest, e);
+                    }
+                } else {
+                    if let Some(parent) = dest.parent() {
+                        if let Err(e) = std::fs::create_dir_all(parent) {
+                            warn!("Failed to create parent directory {:?}: {}", parent, e);
+                        }
+                    }
+                    if let Err(e) = std::fs::copy(src, &dest) {
+                        warn!("Failed to copy {:?} to {:?}: {}", src, dest, e);
+                    }
+                }
             }
         }
 
