@@ -17,24 +17,41 @@ use tracing::{error, info, warn};
 pub struct TestExecutor {
     threads: usize,
     claude_path: PathBuf,
-    _plugin_temp_dir: tempfile::TempDir, // Kept alive for lifetime of TestExecutor
+    _plugin_temp_dir: Option<tempfile::TempDir>, // Kept alive for lifetime of TestExecutor
     harness_plugin: Arc<PathBuf>,
+    test_plugin_dir: Option<PathBuf>,
+    log_output_dir: Option<PathBuf>,
 }
 
 impl TestExecutor {
     /// Create a new test executor
-    pub fn new(threads: usize) -> Result<Self> {
+    pub fn new(
+        threads: usize,
+        log_output_dir: Option<String>,
+        plugin_dir: Option<String>,
+    ) -> Result<Self> {
         // Find claude binary
         let claude_path = which::which("claude").unwrap_or_else(|_| PathBuf::from("claude"));
 
-        // Extract embedded harness plugin to temp directory
-        let (temp_dir, plugin_dir) = extract_harness_plugin()?;
+        // Extract harness plugin (always needed for question-responder)
+        let (harness_temp, harness_plugin_path) = extract_harness_plugin()?;
+
+        // Parse test plugin dir from --plugin-dir
+        let test_plugin_dir = plugin_dir
+            .filter(|d| !d.is_empty())
+            .map(PathBuf::from)
+            .filter(|p| p.exists());
+
+        // Parse log output directory
+        let log_output_dir = log_output_dir.filter(|d| !d.is_empty()).map(PathBuf::from);
 
         Ok(Self {
             threads,
             claude_path,
-            _plugin_temp_dir: temp_dir,
-            harness_plugin: Arc::new(plugin_dir),
+            _plugin_temp_dir: Some(harness_temp),
+            harness_plugin: Arc::new(harness_plugin_path),
+            test_plugin_dir,
+            log_output_dir,
         })
     }
 
@@ -53,21 +70,16 @@ impl TestExecutor {
             .map_err(|e| anyhow::anyhow!("Failed to build thread pool: {}", e))?;
 
         // Execute tests in parallel
-        let harness_plugin = Arc::clone(&self.harness_plugin);
         let results: Vec<TestResult> = tests
             .into_par_iter()
-            .map(|test| self.execute_single_test(test, harness_plugin.clone()))
+            .map(|test| self.execute_single_test(test))
             .collect();
 
         Ok(results)
     }
 
     /// Execute a single test
-    fn execute_single_test(
-        &self,
-        desc: TestDescriptor,
-        harness_plugin: Arc<PathBuf>,
-    ) -> TestResult {
+    fn execute_single_test(&self, desc: TestDescriptor) -> TestResult {
         let start = Instant::now();
 
         info!("Starting test: {}/{}", desc.skill_name, desc.test_name);
@@ -88,16 +100,6 @@ impl TestExecutor {
                 };
             }
         };
-
-        // Copy harness plugin to workspace
-        let dest = workspace.path().join("claude-plugin");
-        if let Err(e) = fs_extra::copy_items(
-            &[harness_plugin.as_path()],
-            &dest,
-            &fs_extra::dir::CopyOptions::new(),
-        ) {
-            warn!("Failed to copy harness plugin for {}: {}", desc.test_id, e);
-        }
 
         // Run setup steps
         if let Err(e) = workspace.run_setup(&desc.test.setup) {
@@ -156,6 +158,13 @@ impl TestExecutor {
             })
             .collect();
 
+        // Copy log to output directory if specified
+        if let Some(ref output_dir) = self.log_output_dir {
+            if let Err(e) = self.copy_log_to_output(&log_path, output_dir, &desc) {
+                warn!("Failed to copy log for {}: {}", desc.test_id, e);
+            }
+        }
+
         let passed = check_results.iter().all(|r| r.passed);
         let duration = start.elapsed();
 
@@ -177,22 +186,65 @@ impl TestExecutor {
         }
     }
 
+    /// Copy log file to output directory
+    fn copy_log_to_output(
+        &self,
+        log_path: &PathBuf,
+        output_dir: &PathBuf,
+        desc: &TestDescriptor,
+    ) -> Result<()> {
+        // Create output directory if it doesn't exist
+        std::fs::create_dir_all(output_dir)?;
+
+        // Create filename: skill_test_timestamp.log
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        let filename = format!("{}_{}_{}.log", desc.skill_name, desc.test_name, timestamp);
+        let dest_path = output_dir.join(&filename);
+
+        // Copy log file
+        std::fs::copy(log_path, &dest_path)?;
+
+        info!("Log saved to: {}", dest_path.display());
+        Ok(())
+    }
+
     /// Execute Claude CLI
     fn execute_claude(&self, workspace: &TestWorkspace, test: &TestCase) -> Result<()> {
         let timeout = Duration::from_secs(test.timeout);
 
+        // Build command args
+        let mut args = vec![
+            "-p",
+            "--dangerously-skip-permissions",
+            "--verbose",
+            "--output-format",
+            "stream-json",
+        ];
+
+        // Add harness plugin only if test has [answers] section
+        if test.answers.is_some() {
+            let plugin_dir = self
+                .harness_plugin
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("Invalid plugin path"))?;
+            args.push("--plugin-dir");
+            args.push(plugin_dir);
+        }
+
+        // Add test plugin if specified via --plugin-dir
+        if let Some(ref test_plugin) = self.test_plugin_dir {
+            let test_plugin_str = test_plugin
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("Invalid test plugin path"))?;
+            args.push("--plugin-dir");
+            args.push(test_plugin_str);
+        }
+
+        args.push("--");
+        args.push(test.test_prompt.trim());
+
         let mut child = Command::new(&self.claude_path)
-            .args([
-                "-p",
-                "--dangerously-skip-permissions",
-                "--verbose",
-                "--output-format",
-                "stream-json",
-                "--plugin-dir",
-                "./claude-plugin",
-                "--",
-                test.test_prompt.trim(),
-            ])
+            .args(&args)
             .current_dir(workspace.path())
             .env("CLAUDECODE", "") // Unset to avoid nested session
             .env("SKILL_BENCH_TEST", "1")

@@ -80,9 +80,7 @@ impl AssertionChecker {
             "file-contains" => {
                 let file = check.command.file.as_ref().ok_or("Missing file")?;
                 let contains = check.command.contains.as_ref().ok_or("Missing contains")?;
-                let deny = check.command.deny.unwrap_or(false);
-                let effective_deny = should_deny || deny;
-                file::check_file_content(&self.work_dir, file, contains, !effective_deny)
+                file::check_file_content(&self.work_dir, file, contains, false)
             }
             "log-contains" => {
                 let pattern = check.command.pattern.as_ref().ok_or("Missing pattern")?;
@@ -98,9 +96,7 @@ impl AssertionChecker {
             }
             "skill-invoked" => {
                 let skill = check.command.skill.as_ref().ok_or("Missing skill")?;
-                let deny = check.command.deny.unwrap_or(false);
-                let effective_deny = should_deny || deny;
-                skill::check_skill_invoked(self, skill, effective_deny)
+                skill::check_skill_invoked(self, skill)
             }
             "mcp-loaded" => {
                 let server = check.command.server.as_ref().ok_or("Missing server")?;

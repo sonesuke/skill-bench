@@ -1,6 +1,5 @@
 //! Result reporting (nextest-style)
 
-use crate::cli::LogLevel;
 use crate::models::TestRunSummary;
 use std::io::{self, Write};
 
@@ -13,14 +12,12 @@ pub trait Reporter {
 
 /// Human-readable reporter (nextest-style)
 #[allow(dead_code)]
-pub struct HumanReporter {
-    log_level: LogLevel,
-}
+pub struct HumanReporter;
 
 impl HumanReporter {
     #[allow(dead_code)]
-    pub fn new(log_level: LogLevel) -> Self {
-        Self { log_level }
+    pub fn new() -> Self {
+        Self
     }
 }
 

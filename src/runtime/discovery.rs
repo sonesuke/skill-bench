@@ -17,6 +17,18 @@ impl TestDiscovery {
     /// Create a new test discovery with the given pattern
     pub fn new(pattern: String) -> Self {
         let base_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+        // If pattern is a directory, automatically traverse for all .toml files
+        let pattern = if std::fs::metadata(&pattern)
+            .ok()
+            .map(|m| m.is_dir())
+            .unwrap_or(false)
+        {
+            format!("{}/**/*.toml", pattern.trim_end_matches('/'))
+        } else {
+            pattern
+        };
+
         Self { base_dir, pattern }
     }
 
