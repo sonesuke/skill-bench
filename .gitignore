@@ -19,6 +19,7 @@ Cargo.lock
 # Logs
 logs/
 *.log
+!tests/fixtures/logs/*.log
 
 # Python (for conversion scripts)
 __pycache__/

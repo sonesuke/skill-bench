@@ -1,0 +1,3 @@
+{"type":"system","subtype":"init","session_id":"test-123","tools":["Bash","Glob","Grep","Read","Edit","Write"],"mcp_servers":[{"name":"plugin:google-patent-cli:google-patent-cli","status":"connected"},{"name":"plugin:arxiv-cli:arxiv-cli","status":"connected"}],"model":"claude-sonnet-4-6","permissionMode":"default","skills":["patent-kit:progress-reporting","patent-kit:concept-interviewing","patent-kit:legal-checking","patent-kit:prior-art-researching","patent-kit:evaluating","patent-kit:screening","patent-kit:setup","patent-kit:targeting","patent-kit:claim-analyzing"]}
+{"type":"user","content":"test"}
+{"type":"assistant","content":"test response"}

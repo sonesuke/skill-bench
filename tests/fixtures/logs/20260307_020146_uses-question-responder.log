@@ -1,0 +1,3 @@
+{"type":"system","subtype":"init","session_id":"test-456","tools":["Bash","Glob","Grep","Read","Edit","Write"],"mcp_servers":[],"model":"claude-sonnet-4-6","permissionMode":"default","skills":["patent-kit:concept-interviewing","question-responder"]}
+{"type":"user","content":"test"}
+{"type":"assistant","message":{"content":"The user asked about testing"}}
