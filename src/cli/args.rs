@@ -43,10 +43,6 @@ pub enum Commands {
         #[arg(long)]
         plugin_dir: Option<String>,
 
-        /// Target plugin directory for testing (contains .claude-plugin/)
-        #[arg(long)]
-        target_plugin_dir: Option<String>,
-
         /// Log output directory for Claude session logs
         #[arg(short, long, default_value = "")]
         log: String,

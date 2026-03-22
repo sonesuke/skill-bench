@@ -19,7 +19,6 @@ pub struct TestExecutor {
     claude_path: PathBuf,
     _plugin_temp_dir: Option<tempfile::TempDir>, // Kept alive for lifetime of TestExecutor
     harness_plugin: Arc<PathBuf>,
-    target_plugin_dir: Option<PathBuf>,
     log_output_dir: Option<PathBuf>,
     skills_dir: Option<PathBuf>,
 }
@@ -31,7 +30,6 @@ impl TestExecutor {
         log_output_dir: Option<String>,
         skills_dir: Option<String>,
         plugin_dir: Option<String>,
-        target_plugin_dir: Option<String>,
     ) -> Result<Self> {
         // Find claude binary
         let claude_path = which::which("claude").unwrap_or_else(|_| PathBuf::from("claude"));
@@ -54,17 +52,11 @@ impl TestExecutor {
         // Parse skills directory
         let skills_dir = skills_dir.filter(|d| !d.is_empty()).map(PathBuf::from);
 
-        // Parse target plugin directory
-        let target_plugin_dir = target_plugin_dir
-            .filter(|d| !d.is_empty())
-            .map(PathBuf::from);
-
         Ok(Self {
             threads,
             claude_path,
             _plugin_temp_dir: temp_dir,
             harness_plugin: Arc::new(plugin_path),
-            target_plugin_dir,
             log_output_dir,
             skills_dir,
         })
@@ -263,11 +255,6 @@ impl TestExecutor {
     fn execute_claude(&self, workspace: &TestWorkspace, test: &TestCase) -> Result<()> {
         let timeout = Duration::from_secs(test.timeout);
 
-        let plugin_dir = self
-            .harness_plugin
-            .to_str()
-            .ok_or_else(|| anyhow::anyhow!("Invalid plugin path"))?;
-
         // Build command args
         let mut args = vec![
             "-p",
@@ -275,17 +262,27 @@ impl TestExecutor {
             "--verbose",
             "--output-format",
             "stream-json",
-            "--plugin-dir",
-            plugin_dir,
         ];
 
-        // Add target plugin dir if specified
-        if let Some(ref target_dir) = self.target_plugin_dir {
-            let target_dir_str = target_dir
+        // Add harness plugin only if test has [answers] section
+        if test.answers.is_some() {
+            let plugin_dir = self
+                .harness_plugin
                 .to_str()
-                .ok_or_else(|| anyhow::anyhow!("Invalid target plugin path"))?;
+                .ok_or_else(|| anyhow::anyhow!("Invalid plugin path"))?;
             args.push("--plugin-dir");
-            args.push(target_dir_str);
+            args.push(plugin_dir);
+        }
+
+        // Check if workspace has .claude-plugin (test target plugin)
+        let workspace_plugin_dir = workspace.path().join(".claude-plugin");
+        if workspace_plugin_dir.exists() {
+            let workspace_dir = workspace
+                .path()
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("Invalid workspace path"))?;
+            args.push("--plugin-dir");
+            args.push(workspace_dir);
         }
 
         args.push("--");

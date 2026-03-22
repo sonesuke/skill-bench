@@ -21,7 +21,6 @@ struct TestConfig {
     threads: usize,
     skills_dir: Option<String>,
     plugin_dir: Option<String>,
-    target_plugin_dir: Option<String>,
     log: String,
 }
 
@@ -46,7 +45,6 @@ async fn main() -> Result<()> {
             threads,
             skills_dir,
             plugin_dir,
-            target_plugin_dir,
             log,
         } => {
             let config = TestConfig {
@@ -57,7 +55,6 @@ async fn main() -> Result<()> {
                 threads,
                 skills_dir,
                 plugin_dir,
-                target_plugin_dir,
                 log,
             };
             run_tests(config)?;
@@ -122,7 +119,6 @@ fn run_tests(config: TestConfig) -> Result<()> {
         Some(config.log.clone()),
         config.skills_dir,
         config.plugin_dir,
-        config.target_plugin_dir,
     )?;
     let results = executor.execute_tests(tests)?;
 
