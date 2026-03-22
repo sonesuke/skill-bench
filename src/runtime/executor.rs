@@ -19,22 +19,35 @@ pub struct TestExecutor {
     claude_path: PathBuf,
     _plugin_temp_dir: tempfile::TempDir, // Kept alive for lifetime of TestExecutor
     harness_plugin: Arc<PathBuf>,
+    log_output_dir: Option<PathBuf>,
 }
 
 impl TestExecutor {
     /// Create a new test executor
-    pub fn new(threads: usize) -> Result<Self> {
+    pub fn new(threads: usize, log_output_dir: Option<String>) -> Result<Self> {
         // Find claude binary
         let claude_path = which::which("claude").unwrap_or_else(|_| PathBuf::from("claude"));
 
         // Extract embedded harness plugin to temp directory
         let (temp_dir, plugin_dir) = extract_harness_plugin()?;
 
+        // Parse log output directory
+        let log_output_dir = if let Some(dir) = log_output_dir {
+            if dir.is_empty() {
+                None
+            } else {
+                Some(PathBuf::from(dir))
+            }
+        } else {
+            None
+        };
+
         Ok(Self {
             threads,
             claude_path,
             _plugin_temp_dir: temp_dir,
             harness_plugin: Arc::new(plugin_dir),
+            log_output_dir,
         })
     }
 
@@ -156,6 +169,13 @@ impl TestExecutor {
             })
             .collect();
 
+        // Copy log to output directory if specified
+        if let Some(ref output_dir) = self.log_output_dir {
+            if let Err(e) = self.copy_log_to_output(&log_path, output_dir, &desc) {
+                warn!("Failed to copy log for {}: {}", desc.test_id, e);
+            }
+        }
+
         let passed = check_results.iter().all(|r| r.passed);
         let duration = start.elapsed();
 
@@ -175,6 +195,28 @@ impl TestExecutor {
             check_results,
             execution_error: None,
         }
+    }
+
+    /// Copy log file to output directory
+    fn copy_log_to_output(
+        &self,
+        log_path: &PathBuf,
+        output_dir: &PathBuf,
+        desc: &TestDescriptor,
+    ) -> Result<()> {
+        // Create output directory if it doesn't exist
+        std::fs::create_dir_all(output_dir)?;
+
+        // Create filename: skill_test_timestamp.log
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        let filename = format!("{}_{}_{}.log", desc.skill_name, desc.test_name, timestamp);
+        let dest_path = output_dir.join(&filename);
+
+        // Copy log file
+        std::fs::copy(log_path, &dest_path)?;
+
+        info!("Log saved to: {}", dest_path.display());
+        Ok(())
     }
 
     /// Execute Claude CLI

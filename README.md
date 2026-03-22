@@ -63,6 +63,9 @@ skill-bench run --threads 4
 # Log level
 skill-bench run --log-level all      # Show all tests
 skill-bench run --log-level fail     # Show failures only
+
+# Persist Claude session logs to directory
+skill-bench run --log-output logs    # Save logs to logs/ directory
 ```
 
 ### Test Pattern Syntax

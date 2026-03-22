@@ -36,6 +36,10 @@ pub enum Commands {
         #[arg(short = 'j', long, default_value_t = num_cpus::get())]
         threads: usize,
 
+        /// Log output directory for Claude session logs
+        #[arg(long, default_value = "")]
+        log_output: String,
+
         /// Log level
         #[arg(long, default_value = "fail")]
         log_level: LogLevel,
