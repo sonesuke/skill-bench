@@ -101,18 +101,6 @@ impl TestExecutor {
             }
         };
 
-        // Copy test plugin to workspace
-        if let Some(ref plugin_dir) = self.test_plugin_dir {
-            // Copy entire plugin directory (including .claude-plugin/) to workspace
-            if let Err(e) = fs_extra::copy_items(
-                &[plugin_dir.as_path()],
-                workspace.path(),
-                &fs_extra::dir::CopyOptions::new().content_only(true),
-            ) {
-                warn!("Failed to copy test plugin for {}: {}", desc.test_id, e);
-            }
-        }
-
         // Run setup steps
         if let Err(e) = workspace.run_setup(&desc.test.setup) {
             error!("Setup failed for {}: {}", desc.test_id, e);
@@ -243,15 +231,13 @@ impl TestExecutor {
             args.push(plugin_dir);
         }
 
-        // Check if workspace has .claude-plugin (test target plugin)
-        let workspace_plugin_dir = workspace.path().join(".claude-plugin");
-        if workspace_plugin_dir.exists() {
-            let workspace_dir = workspace
-                .path()
+        // Add test plugin if specified via --plugin-dir
+        if let Some(ref test_plugin) = self.test_plugin_dir {
+            let test_plugin_str = test_plugin
                 .to_str()
-                .ok_or_else(|| anyhow::anyhow!("Invalid workspace path"))?;
+                .ok_or_else(|| anyhow::anyhow!("Invalid test plugin path"))?;
             args.push("--plugin-dir");
-            args.push(workspace_dir);
+            args.push(test_plugin_str);
         }
 
         args.push("--");
