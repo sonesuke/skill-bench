@@ -110,12 +110,21 @@ impl TestExecutor {
 
         // Copy skills and agents from skills_dir to .claude/
         if let Some(ref skills_dir) = self.skills_dir {
+            // Create .claude directory in workspace
+            let claude_dir = workspace.path().join(".claude");
+            if let Err(e) = std::fs::create_dir_all(&claude_dir) {
+                warn!(
+                    "Failed to create .claude directory for {}: {}",
+                    desc.test_id, e
+                );
+            }
+
             // Copy skills/
             let skills_src = skills_dir.join("skills");
             if skills_src.exists() {
                 if let Err(e) = fs_extra::copy_items(
                     &[skills_src.as_path()],
-                    workspace.path(),
+                    &claude_dir,
                     &fs_extra::dir::CopyOptions::new(),
                 ) {
                     warn!("Failed to copy skills for {}: {}", desc.test_id, e);
@@ -127,7 +136,7 @@ impl TestExecutor {
             if agents_src.exists() {
                 if let Err(e) = fs_extra::copy_items(
                     &[agents_src.as_path()],
-                    workspace.path(),
+                    &claude_dir,
                     &fs_extra::dir::CopyOptions::new(),
                 ) {
                     warn!("Failed to copy agents for {}: {}", desc.test_id, e);

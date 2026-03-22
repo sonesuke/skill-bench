@@ -3,12 +3,13 @@
 
 use crate::assertions::AssertionChecker;
 
-/// Check if skill was loaded (present in init skills array)
+/// Check if skill was loaded (present in init skills array or slash_commands)
 pub fn check_skill_loaded(checker: &AssertionChecker, skill_name: &str) -> Result<(), String> {
     let init_msg = checker
         .init_message()
         .ok_or_else(|| "No log entries found".to_string())?;
 
+    // Check skills array first
     let skills = init_msg
         .get("skills")
         .and_then(|s| s.as_array())
@@ -20,13 +21,27 @@ pub fn check_skill_loaded(checker: &AssertionChecker, skill_name: &str) -> Resul
         .any(|s| s.contains(skill_name));
 
     if found {
-        Ok(())
-    } else {
-        Err(format!(
-            "Skill '{}' not found in init skills array",
-            skill_name
-        ))
+        return Ok(());
     }
+
+    // Also check slash_commands for plugin-provided skills
+    let slash_commands = init_msg.get("slash_commands").and_then(|s| s.as_array());
+
+    if let Some(commands) = slash_commands {
+        let found = commands
+            .iter()
+            .filter_map(|s| s.as_str())
+            .any(|s| s.contains(skill_name));
+
+        if found {
+            return Ok(());
+        }
+    }
+
+    Err(format!(
+        "Skill '{}' not found in init skills array or slash_commands",
+        skill_name
+    ))
 }
 
 /// Check if skill was invoked
