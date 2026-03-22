@@ -113,7 +113,10 @@ impl TestExecutor {
             // Create .claude directory in workspace
             let claude_dir = workspace.path().join(".claude");
             if let Err(e) = std::fs::create_dir_all(&claude_dir) {
-                warn!("Failed to create .claude directory for {}: {}", desc.test_id, e);
+                warn!(
+                    "Failed to create .claude directory for {}: {}",
+                    desc.test_id, e
+                );
             }
 
             // Copy skills/
