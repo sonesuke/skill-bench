@@ -20,7 +20,6 @@ pub struct TestExecutor {
     _plugin_temp_dir: Option<tempfile::TempDir>, // Kept alive for lifetime of TestExecutor
     harness_plugin: Arc<PathBuf>,
     log_output_dir: Option<PathBuf>,
-    skills_dir: Option<PathBuf>,
 }
 
 impl TestExecutor {
@@ -28,7 +27,6 @@ impl TestExecutor {
     pub fn new(
         threads: usize,
         log_output_dir: Option<String>,
-        skills_dir: Option<String>,
         plugin_dir: Option<String>,
     ) -> Result<Self> {
         // Find claude binary
@@ -49,16 +47,12 @@ impl TestExecutor {
         // Parse log output directory
         let log_output_dir = log_output_dir.filter(|d| !d.is_empty()).map(PathBuf::from);
 
-        // Parse skills directory
-        let skills_dir = skills_dir.filter(|d| !d.is_empty()).map(PathBuf::from);
-
         Ok(Self {
             threads,
             claude_path,
             _plugin_temp_dir: temp_dir,
             harness_plugin: Arc::new(plugin_path),
             log_output_dir,
-            skills_dir,
         })
     }
 
@@ -107,33 +101,6 @@ impl TestExecutor {
                 };
             }
         };
-
-        // Copy skills and agents from skills_dir to .claude/
-        if let Some(ref skills_dir) = self.skills_dir {
-            // Copy skills/
-            let skills_src = skills_dir.join("skills");
-            if skills_src.exists() {
-                if let Err(e) = fs_extra::copy_items(
-                    &[skills_src.as_path()],
-                    workspace.path(),
-                    &fs_extra::dir::CopyOptions::new(),
-                ) {
-                    warn!("Failed to copy skills for {}: {}", desc.test_id, e);
-                }
-            }
-
-            // Copy agents/
-            let agents_src = skills_dir.join("agents");
-            if agents_src.exists() {
-                if let Err(e) = fs_extra::copy_items(
-                    &[agents_src.as_path()],
-                    workspace.path(),
-                    &fs_extra::dir::CopyOptions::new(),
-                ) {
-                    warn!("Failed to copy agents for {}: {}", desc.test_id, e);
-                }
-            }
-        }
 
         // Run setup steps
         if let Err(e) = workspace.run_setup(&desc.test.setup) {

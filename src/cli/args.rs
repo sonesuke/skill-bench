@@ -35,10 +35,6 @@ pub enum Commands {
         #[arg(short = 'j', long, default_value_t = num_cpus::get())]
         threads: usize,
 
-        /// Skills source directory (contains skills/ and agents/ subdirectories)
-        #[arg(short, long)]
-        skills_dir: Option<String>,
-
         /// Plugin directory to install (contains .claude-plugin/)
         #[arg(long)]
         plugin_dir: Option<String>,
