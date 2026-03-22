@@ -137,8 +137,4 @@ impl TestRunSummary {
     pub fn failures(&self) -> Vec<&TestResult> {
         self.results.iter().filter(|r| !r.passed).collect()
     }
-
-    pub fn passed_results(&self) -> Vec<&TestResult> {
-        self.results.iter().filter(|r| r.passed).collect()
-    }
 }
