@@ -101,38 +101,6 @@ impl TestExecutor {
             }
         };
 
-        // Copy test plugin to workspace
-        if let Some(ref plugin_dir) = self.test_plugin_dir {
-            // Copy entire plugin directory contents (including .claude-plugin/) to workspace
-            // We need to copy the contents of plugin_dir to workspace, not plugin_dir itself
-            for entry in walkdir::WalkDir::new(plugin_dir)
-                .min_depth(1)
-                .into_iter()
-                .filter_map(|e| e.ok())
-            {
-                let src = entry.path();
-                let rel_path = src
-                    .strip_prefix(plugin_dir)
-                    .expect("Failed to get relative path");
-                let dest = workspace.path().join(rel_path);
-
-                if src.is_dir() {
-                    if let Err(e) = std::fs::create_dir_all(&dest) {
-                        warn!("Failed to create directory {:?}: {}", dest, e);
-                    }
-                } else {
-                    if let Some(parent) = dest.parent() {
-                        if let Err(e) = std::fs::create_dir_all(parent) {
-                            warn!("Failed to create parent directory {:?}: {}", parent, e);
-                        }
-                    }
-                    if let Err(e) = std::fs::copy(src, &dest) {
-                        warn!("Failed to copy {:?} to {:?}: {}", src, dest, e);
-                    }
-                }
-            }
-        }
-
         // Run setup steps
         if let Err(e) = workspace.run_setup(&desc.test.setup) {
             error!("Setup failed for {}: {}", desc.test_id, e);
@@ -263,15 +231,13 @@ impl TestExecutor {
             args.push(plugin_dir);
         }
 
-        // Check if workspace has .claude-plugin (test target plugin)
-        let workspace_plugin_dir = workspace.path().join(".claude-plugin");
-        if workspace_plugin_dir.exists() {
-            let workspace_dir = workspace
-                .path()
+        // Add test plugin if specified via --plugin-dir
+        if let Some(ref test_plugin) = self.test_plugin_dir {
+            let test_plugin_str = test_plugin
                 .to_str()
-                .ok_or_else(|| anyhow::anyhow!("Invalid workspace path"))?;
+                .ok_or_else(|| anyhow::anyhow!("Invalid test plugin path"))?;
             args.push("--plugin-dir");
-            args.push(workspace_dir);
+            args.push(test_plugin_str);
         }
 
         args.push("--");
