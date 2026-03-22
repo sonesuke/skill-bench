@@ -3,12 +3,13 @@
 
 use crate::assertions::AssertionChecker;
 
-/// Check if skill was loaded (present in init skills array)
+/// Check if skill was loaded (present in init skills array or slash_commands)
 pub fn check_skill_loaded(checker: &AssertionChecker, skill_name: &str) -> Result<(), String> {
     let init_msg = checker
         .init_message()
         .ok_or_else(|| "No log entries found".to_string())?;
 
+    // Check skills array first
     let skills = init_msg
         .get("skills")
         .and_then(|s| s.as_array())
@@ -20,22 +21,31 @@ pub fn check_skill_loaded(checker: &AssertionChecker, skill_name: &str) -> Resul
         .any(|s| s.contains(skill_name));
 
     if found {
-        Ok(())
-    } else {
-        Err(format!(
-            "Skill '{}' not found in init skills array",
-            skill_name
-        ))
+        return Ok(());
     }
+
+    // Also check slash_commands for plugin-provided skills
+    let slash_commands = init_msg.get("slash_commands").and_then(|s| s.as_array());
+
+    if let Some(commands) = slash_commands {
+        let found = commands
+            .iter()
+            .filter_map(|s| s.as_str())
+            .any(|s| s.contains(skill_name));
+
+        if found {
+            return Ok(());
+        }
+    }
+
+    Err(format!(
+        "Skill '{}' not found in init skills array or slash_commands",
+        skill_name
+    ))
 }
 
 /// Check if skill was invoked
-/// inverted: true means check that skill was NOT invoked
-pub fn check_skill_invoked(
-    checker: &AssertionChecker,
-    skill_name: &str,
-    inverted: bool,
-) -> Result<(), String> {
+pub fn check_skill_invoked(checker: &AssertionChecker, skill_name: &str) -> Result<(), String> {
     // Search log for skill invocation
     // Pattern: "Skill" tool_use with "skill":"patent-kit:<skill-name>"
     let found = checker
@@ -64,13 +74,9 @@ pub fn check_skill_invoked(
             })
         });
 
-    match (found, inverted) {
-        (true, false) => Ok(()),
-        (false, true) => Ok(()),
-        (true, true) => Err(format!(
-            "Skill '{}' was invoked but should not have been",
-            skill_name
-        )),
-        (false, false) => Err(format!("Skill '{}' was not invoked", skill_name)),
+    if found {
+        Ok(())
+    } else {
+        Err(format!("Skill '{}' was not invoked", skill_name))
     }
 }

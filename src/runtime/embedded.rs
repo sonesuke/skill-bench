@@ -9,11 +9,12 @@ use std::path::PathBuf;
 pub fn extract_harness_plugin() -> Result<(tempfile::TempDir, PathBuf)> {
     let temp_dir = tempfile::tempdir()?;
     let plugin_dir = temp_dir.path().join("claude-plugin");
-    fs::create_dir_all(&plugin_dir)?;
+    let claude_plugin_dir = plugin_dir.join(".claude-plugin");
+    fs::create_dir_all(&claude_plugin_dir)?;
 
-    // plugin.json
+    // .claude-plugin/plugin.json
     let plugin_json = include_bytes!("../assets/harness-plugin/.claude-plugin/plugin.json");
-    fs::write(plugin_dir.join("plugin.json"), plugin_json)?;
+    fs::write(claude_plugin_dir.join("plugin.json"), plugin_json)?;
 
     // skills/question-responder/SKILL.md
     let skill_md = include_bytes!("../assets/harness-plugin/skills/question-responder/SKILL.md");
