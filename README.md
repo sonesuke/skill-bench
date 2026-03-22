@@ -38,11 +38,17 @@ skill-bench list
 ### Run tests
 
 ```bash
-# Run all tests
+# Run tests from specific pattern (glob pattern)
+skill-bench run "cases/*/*.toml"
+skill-bench run "cases/concept-interviewing/*.toml"
+
+# Run all tests (uses default pattern)
 skill-bench run
 
-# Filter by pattern
+# Filter by test name (regex)
 skill-bench run --filter "functional-.*"
+
+# Filter by skill name
 skill-bench run --skill investigation-recording
 
 # Rerun only failed tests
@@ -54,6 +60,25 @@ skill-bench run --threads 4
 # Log level
 skill-bench run --log-level all      # Show all tests
 skill-bench run --log-level fail     # Show failures only
+```
+
+### Test Pattern Syntax
+
+The pattern argument uses glob syntax to match test files:
+
+- `cases/*/*.toml` - All TOML files in immediate subdirectories of `cases/`
+- `cases/concept-interviewing/*.toml` - All TOML files in a specific directory
+- `cases/**/*.toml` - All TOML files recursively under `cases/`
+- `cases/functional-*.toml` - All TOML files matching a pattern
+
+### List tests
+
+```bash
+# List all tests from specific pattern
+skill-bench list "cases/*/*.toml"
+
+# List tests (uses default pattern)
+skill-bench list
 ```
 
 ## Directory Structure
