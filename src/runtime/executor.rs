@@ -230,9 +230,9 @@ impl TestExecutor {
         // Create output directory if it doesn't exist
         std::fs::create_dir_all(output_dir)?;
 
-        // Create filename: skill_test_timestamp.log
+        // Create filename: timestamp_skill_test.log
         let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-        let filename = format!("{}_{}_{}.log", desc.skill_name, desc.test_name, timestamp);
+        let filename = format!("{}_{}_{}.log", timestamp, desc.skill_name, desc.test_name);
         let dest_path = output_dir.join(&filename);
 
         // Copy log file
