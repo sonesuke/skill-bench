@@ -17,37 +17,48 @@ use tracing::{error, info, warn};
 pub struct TestExecutor {
     threads: usize,
     claude_path: PathBuf,
-    _plugin_temp_dir: tempfile::TempDir, // Kept alive for lifetime of TestExecutor
+    _plugin_temp_dir: Option<tempfile::TempDir>, // Kept alive for lifetime of TestExecutor
     harness_plugin: Arc<PathBuf>,
     log_output_dir: Option<PathBuf>,
+    skills_dir: Option<PathBuf>,
 }
 
 impl TestExecutor {
     /// Create a new test executor
-    pub fn new(threads: usize, log_output_dir: Option<String>) -> Result<Self> {
+    pub fn new(
+        threads: usize,
+        log_output_dir: Option<String>,
+        skills_dir: Option<String>,
+        plugin_dir: Option<String>,
+    ) -> Result<Self> {
         // Find claude binary
         let claude_path = which::which("claude").unwrap_or_else(|_| PathBuf::from("claude"));
 
-        // Extract embedded harness plugin to temp directory
-        let (temp_dir, plugin_dir) = extract_harness_plugin()?;
+        // Use specified plugin_dir or extract embedded harness plugin
+        let (temp_dir, plugin_path) = if let Some(dir) = plugin_dir {
+            let plugin_path = PathBuf::from(&dir);
+            if !plugin_path.exists() {
+                anyhow::bail!("Plugin directory does not exist: {}", dir);
+            }
+            (None, plugin_path)
+        } else {
+            let (temp_dir, plugin_dir) = extract_harness_plugin()?;
+            (Some(temp_dir), plugin_dir)
+        };
 
         // Parse log output directory
-        let log_output_dir = if let Some(dir) = log_output_dir {
-            if dir.is_empty() {
-                None
-            } else {
-                Some(PathBuf::from(dir))
-            }
-        } else {
-            None
-        };
+        let log_output_dir = log_output_dir.filter(|d| !d.is_empty()).map(PathBuf::from);
+
+        // Parse skills directory
+        let skills_dir = skills_dir.filter(|d| !d.is_empty()).map(PathBuf::from);
 
         Ok(Self {
             threads,
             claude_path,
             _plugin_temp_dir: temp_dir,
-            harness_plugin: Arc::new(plugin_dir),
+            harness_plugin: Arc::new(plugin_path),
             log_output_dir,
+            skills_dir,
         })
     }
 
@@ -66,21 +77,16 @@ impl TestExecutor {
             .map_err(|e| anyhow::anyhow!("Failed to build thread pool: {}", e))?;
 
         // Execute tests in parallel
-        let harness_plugin = Arc::clone(&self.harness_plugin);
         let results: Vec<TestResult> = tests
             .into_par_iter()
-            .map(|test| self.execute_single_test(test, harness_plugin.clone()))
+            .map(|test| self.execute_single_test(test))
             .collect();
 
         Ok(results)
     }
 
     /// Execute a single test
-    fn execute_single_test(
-        &self,
-        desc: TestDescriptor,
-        harness_plugin: Arc<PathBuf>,
-    ) -> TestResult {
+    fn execute_single_test(&self, desc: TestDescriptor) -> TestResult {
         let start = Instant::now();
 
         info!("Starting test: {}/{}", desc.skill_name, desc.test_name);
@@ -102,14 +108,33 @@ impl TestExecutor {
             }
         };
 
-        // Copy harness plugin to workspace
-        let dest = workspace.path().join("claude-plugin");
-        if let Err(e) = fs_extra::copy_items(
-            &[harness_plugin.as_path()],
-            &dest,
-            &fs_extra::dir::CopyOptions::new(),
-        ) {
-            warn!("Failed to copy harness plugin for {}: {}", desc.test_id, e);
+        // Copy skills and agents from skills_dir to .claude/
+        if let Some(ref skills_dir) = self.skills_dir {
+            let _claude_dir = workspace.path().join(".claude");
+
+            // Copy skills/
+            let skills_src = skills_dir.join("skills");
+            if skills_src.exists() {
+                if let Err(e) = fs_extra::copy_items(
+                    &[skills_src.as_path()],
+                    workspace.path(),
+                    &fs_extra::dir::CopyOptions::new(),
+                ) {
+                    warn!("Failed to copy skills for {}: {}", desc.test_id, e);
+                }
+            }
+
+            // Copy agents/
+            let agents_src = skills_dir.join("agents");
+            if agents_src.exists() {
+                if let Err(e) = fs_extra::copy_items(
+                    &[agents_src.as_path()],
+                    workspace.path(),
+                    &fs_extra::dir::CopyOptions::new(),
+                ) {
+                    warn!("Failed to copy agents for {}: {}", desc.test_id, e);
+                }
+            }
         }
 
         // Run setup steps
@@ -223,6 +248,11 @@ impl TestExecutor {
     fn execute_claude(&self, workspace: &TestWorkspace, test: &TestCase) -> Result<()> {
         let timeout = Duration::from_secs(test.timeout);
 
+        let plugin_dir = self
+            .harness_plugin
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid plugin path"))?;
+
         let mut child = Command::new(&self.claude_path)
             .args([
                 "-p",
@@ -231,7 +261,7 @@ impl TestExecutor {
                 "--output-format",
                 "stream-json",
                 "--plugin-dir",
-                "./claude-plugin",
+                plugin_dir,
                 "--",
                 test.test_prompt.trim(),
             ])

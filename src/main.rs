@@ -19,6 +19,8 @@ struct TestConfig {
     skill: Option<String>,
     rerun_failed: bool,
     threads: usize,
+    skills_dir: Option<String>,
+    plugin_dir: Option<String>,
     log: String,
 }
 
@@ -41,6 +43,8 @@ async fn main() -> Result<()> {
             skill,
             rerun_failed,
             threads,
+            skills_dir,
+            plugin_dir,
             log,
         } => {
             let config = TestConfig {
@@ -49,6 +53,8 @@ async fn main() -> Result<()> {
                 skill,
                 rerun_failed,
                 threads,
+                skills_dir,
+                plugin_dir,
                 log,
             };
             run_tests(config)?;
@@ -108,7 +114,12 @@ fn run_tests(config: TestConfig) -> Result<()> {
     println!();
 
     // Execute tests
-    let executor = TestExecutor::new(config.threads, Some(config.log.clone()))?;
+    let executor = TestExecutor::new(
+        config.threads,
+        Some(config.log.clone()),
+        config.skills_dir,
+        config.plugin_dir,
+    )?;
     let results = executor.execute_tests(tests)?;
 
     // Create summary
