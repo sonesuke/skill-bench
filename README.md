@@ -60,15 +60,22 @@ skill-bench run --rerun-failed
 # Specify parallel threads
 skill-bench run --threads 4
 
-# Specify skills source directory (skills/ and agents/ will be copied to .claude/)
-skill-bench run --skills-dir ./my-skills
-
 # Specify plugin directory (path to directory containing .claude-plugin/)
-skill-bench run --plugin-dir ./harness-plugin
+skill-bench run --plugin-dir ./patent-kit
 
 # Persist Claude session logs to directory
 skill-bench run --log logs    # Save logs to logs/ directory
 skill-bench run -l .          # Short form: save to current directory
+```
+
+### Display Timeline
+
+```bash
+# Display timeline of test execution from log file
+skill-bench timeline /path/to/log-file.log
+
+# Show detailed output
+skill-bench timeline /path/to/log-file.log --verbose
 ```
 
 ### Test Pattern Syntax
