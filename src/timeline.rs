@@ -13,6 +13,7 @@ pub struct TimelineEvent {
     pub event_type: String,
     pub content: String,
     pub details: Option<String>,
+    pub sequence: usize, // Sequential number for events without timestamps
 }
 
 /// Display timeline to stdout
@@ -24,14 +25,20 @@ pub fn display_timeline(path: &Path, verbose: bool) -> Result<()> {
         return Ok(());
     }
 
-    let duration = events
-        .iter()
-        .map(|e| e.timestamp)
-        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-        .unwrap_or(0.0);
+    let has_timestamps = events.iter().any(|e| e.timestamp > 0.0);
+    let max_sequence = events.iter().map(|e| e.sequence).max().unwrap_or(0);
 
     println!("Timeline: {}", path.display());
-    println!("Duration: {:.2}s\n", duration);
+    if has_timestamps {
+        let duration = events
+            .iter()
+            .map(|e| e.timestamp)
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap_or(0.0);
+        println!("Duration: {:.2}s\n", duration);
+    } else {
+        println!("Events: {}\n", max_sequence);
+    }
 
     for event in &events {
         let icon = match event.event_type.as_str() {
@@ -42,7 +49,12 @@ pub fn display_timeline(path: &Path, verbose: bool) -> Result<()> {
             _ => "⚪",
         };
 
-        println!("[{:.2}s] {} {}", event.timestamp, icon, event.content);
+        // Show timestamp if available, otherwise show sequence number
+        if event.timestamp > 0.0 {
+            println!("[{:.2}s] {} {}", event.timestamp, icon, event.content);
+        } else {
+            println!("[#{}] {} {}", event.sequence, icon, event.content);
+        }
 
         if verbose {
             if let Some(ref details) = event.details {
@@ -67,32 +79,11 @@ fn load_timeline(path: &Path) -> Vec<TimelineEvent> {
 
     let reader = BufReader::new(file);
     let mut events = Vec::new();
+    let mut sequence = 0;
 
-    // First pass: find the start time
-    let start_time = reader
-        .lines()
-        .map_while(Result::ok)
-        .filter_map(|line| serde_json::from_str::<Value>(&line).ok())
-        .find_map(|entry| entry.get("timestamp").and_then(|t| t.as_f64()));
-
-    let start = start_time.unwrap_or(0.0);
-
-    // Second pass: collect events
-    let file = match File::open(path) {
-        Ok(f) => f,
-        Err(_) => return Vec::new(),
-    };
-
-    let reader = BufReader::new(file);
-
+    // Since logs don't have reliable timestamps, use sequence numbers
     for line in reader.lines().map_while(Result::ok) {
         if let Ok(entry) = serde_json::from_str::<Value>(&line) {
-            let timestamp = entry
-                .get("timestamp")
-                .and_then(|t| t.as_f64())
-                .unwrap_or(0.0);
-            let relative_time = if start > 0.0 { timestamp - start } else { 0.0 };
-
             let event_type = entry
                 .get("type")
                 .and_then(|t| t.as_str())
@@ -125,11 +116,13 @@ fn load_timeline(path: &Path) -> Vec<TimelineEvent> {
                                                 .and_then(|n| n.as_str())
                                                 .unwrap_or("unknown");
                                             let input = item.get("input").unwrap_or(&Value::Null);
+                                            sequence += 1;
                                             events.push(TimelineEvent {
-                                                timestamp: relative_time,
+                                                timestamp: 0.0,
                                                 event_type: "tool_use".to_string(),
                                                 content: format!("Tool: {}", name),
                                                 details: Some(format!("Input: {}", input)),
+                                                sequence,
                                             });
                                         }
                                     }
@@ -149,11 +142,13 @@ fn load_timeline(path: &Path) -> Vec<TimelineEvent> {
                 ),
             };
 
+            sequence += 1;
             events.push(TimelineEvent {
-                timestamp: relative_time,
+                timestamp: 0.0,
                 event_type: event_type.to_string(),
                 content,
                 details,
+                sequence,
             });
         }
     }
