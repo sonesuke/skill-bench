@@ -1,6 +1,7 @@
 // Database assertions
 // Ported from check-db-query.sh
 
+use rusqlite::types::Value;
 use rusqlite::Connection;
 use std::path::Path;
 
@@ -36,7 +37,16 @@ pub fn check_db_query(
         .map_err(|e| format!("Failed to prepare query: {}", e))?;
 
     let result: String = stmt
-        .query_row([], |row| row.get(0))
+        .query_row([], |row| {
+            let value: Value = row.get(0)?;
+            Ok(match value {
+                Value::Integer(i) => i.to_string(),
+                Value::Real(f) => f.to_string(),
+                Value::Text(s) => s,
+                Value::Blob(b) => String::from_utf8_lossy(&b).to_string(),
+                Value::Null => String::new(),
+            })
+        })
         .unwrap_or_else(|_| "".to_string());
 
     // Handle numeric comparisons
