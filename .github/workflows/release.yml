@@ -57,7 +57,7 @@ jobs:
           tar czf ../../../skill-bench-${{ matrix.artifact }}.tar.gz skill-bench
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: skill-bench-${{ matrix.artifact }}.tar.gz
@@ -70,7 +70,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
