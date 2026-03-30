@@ -49,4 +49,14 @@ pub enum Commands {
         #[arg(default_value = "cases")]
         pattern: String,
     },
+    /// Display timeline of a log file
+    Timeline {
+        /// Log file to display timeline for
+        log_file: PathBuf,
+        /// Show detailed output
+        #[arg(short, long)]
+        verbose: bool,
+    },
 }
+
+use std::path::PathBuf;
