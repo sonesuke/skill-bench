@@ -1,7 +1,7 @@
 //! Test executor with parallel execution support
 
 use crate::assertions::AssertionChecker;
-use crate::models::{CheckResult, TestCase, TestDescriptor, TestResult};
+use crate::models::{CheckResult, TestCase, TestDescriptor, TestResult, TestStatus};
 use crate::runtime::embedded::extract_harness_plugin;
 use crate::runtime::workspace::TestWorkspace;
 use anyhow::Result;
@@ -10,7 +10,7 @@ use rayon::ThreadPoolBuilder;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::{error, info, warn};
 
@@ -58,8 +58,15 @@ impl TestExecutor {
         })
     }
 
-    /// Execute tests in parallel
-    pub fn execute_tests(&self, tests: Vec<TestDescriptor>) -> Result<Vec<TestResult>> {
+    /// Execute tests in parallel with real-time output callback
+    pub fn execute_tests<F>(
+        &self,
+        tests: Vec<TestDescriptor>,
+        on_test_complete: F,
+    ) -> Result<Vec<TestResult>>
+    where
+        F: Fn(&TestResult) + Send + Sync,
+    {
         info!(
             "Executing {} tests with {} threads",
             tests.len(),
@@ -72,11 +79,16 @@ impl TestExecutor {
             .build_global()
             .map_err(|e| anyhow::anyhow!("Failed to build thread pool: {}", e))?;
 
-        // Execute tests in parallel
-        let results: Vec<TestResult> = tests
-            .into_par_iter()
-            .map(|test| self.execute_single_test(test))
-            .collect();
+        let results = Arc::new(Mutex::new(Vec::with_capacity(tests.len())));
+
+        // Execute tests in parallel, printing results as they complete
+        tests.into_par_iter().for_each(|test| {
+            let result = self.execute_single_test(test);
+            on_test_complete(&result);
+            results.lock().unwrap().push(result);
+        });
+
+        let results = Arc::try_unwrap(results).unwrap().into_inner().unwrap();
 
         Ok(results)
     }
@@ -96,7 +108,7 @@ impl TestExecutor {
                     test_id: desc.test_id.clone(),
                     test_name: desc.test_name,
                     skill_name: desc.skill_name,
-                    passed: false,
+                    status: TestStatus::Fail,
                     duration: start.elapsed(),
                     check_results: vec![],
                     execution_error: Some(format!("Workspace creation failed: {}", e)),
@@ -111,7 +123,7 @@ impl TestExecutor {
                 test_id: desc.test_id.clone(),
                 test_name: desc.test_name,
                 skill_name: desc.skill_name,
-                passed: false,
+                status: TestStatus::Fail,
                 duration: start.elapsed(),
                 check_results: vec![],
                 execution_error: Some(format!("Setup failed: {}", e)),
@@ -130,7 +142,7 @@ impl TestExecutor {
                     test_id: desc.test_id.clone(),
                     test_name: desc.test_name,
                     skill_name: desc.skill_name,
-                    passed: false,
+                    status: TestStatus::Fail,
                     duration: start.elapsed(),
                     check_results: vec![],
                     execution_error: Some(format!("Claude execution failed: {}", e)),
@@ -169,6 +181,11 @@ impl TestExecutor {
         }
 
         let passed = check_results.iter().all(|r| r.passed);
+        let status = if passed {
+            TestStatus::Pass
+        } else {
+            TestStatus::Fail
+        };
         let duration = start.elapsed();
 
         info!(
@@ -182,7 +199,7 @@ impl TestExecutor {
             test_id: desc.test_id,
             test_name: desc.test_name,
             skill_name: desc.skill_name,
-            passed,
+            status,
             duration,
             check_results,
             execution_error: None,

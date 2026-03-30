@@ -143,11 +143,12 @@ test_prompt = "Test prompt"
 
     #[test]
     fn test_test_result_serialization() {
+        use crate::models::TestStatus;
         let result = crate::models::TestResult {
             test_id: "skill/test".to_string(),
             test_name: "test".to_string(),
             skill_name: "skill".to_string(),
-            passed: true,
+            status: TestStatus::Pass,
             duration: std::time::Duration::from_secs(5),
             check_results: vec![crate::models::CheckResult {
                 name: "check1".to_string(),
@@ -159,21 +160,21 @@ test_prompt = "Test prompt"
 
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains("\"test_id\""));
-        assert!(json.contains("\"passed\":true"));
 
         let deserialized: crate::models::TestResult = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.test_id, "skill/test");
-        assert!(deserialized.passed);
+        assert!(deserialized.is_pass());
     }
 
     #[test]
     fn test_test_run_summary() {
+        use crate::models::TestStatus;
         let results = vec![
             crate::models::TestResult {
                 test_id: "skill/test1".to_string(),
                 test_name: "test1".to_string(),
                 skill_name: "skill".to_string(),
-                passed: true,
+                status: TestStatus::Pass,
                 duration: std::time::Duration::from_secs(1),
                 check_results: vec![],
                 execution_error: None,
@@ -182,7 +183,7 @@ test_prompt = "Test prompt"
                 test_id: "skill/test2".to_string(),
                 test_name: "test2".to_string(),
                 skill_name: "skill".to_string(),
-                passed: false,
+                status: TestStatus::Fail,
                 duration: std::time::Duration::from_secs(2),
                 check_results: vec![],
                 execution_error: Some("error".to_string()),

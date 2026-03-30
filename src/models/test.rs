@@ -83,16 +83,30 @@ impl TestDescriptor {
     }
 }
 
+/// Status of a test execution
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum TestStatus {
+    Pass,
+    Fail,
+    Skip,
+}
+
 /// Test execution result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestResult {
     pub test_id: String,
     pub test_name: String,
     pub skill_name: String,
-    pub passed: bool,
+    pub status: TestStatus,
     pub duration: std::time::Duration,
     pub check_results: Vec<CheckResult>,
     pub execution_error: Option<String>,
+}
+
+impl TestResult {
+    pub fn is_pass(&self) -> bool {
+        self.status == TestStatus::Pass
+    }
 }
 
 /// Result of a single check
@@ -121,20 +135,33 @@ impl TestRunSummary {
             .map(|r| r.duration)
             .fold(std::time::Duration::ZERO, |acc, d| acc + d);
 
-        let passed = results.iter().filter(|r| r.passed).count();
-        let failed = results.iter().filter(|r| !r.passed).count();
+        let passed = results
+            .iter()
+            .filter(|r| r.status == TestStatus::Pass)
+            .count();
+        let failed = results
+            .iter()
+            .filter(|r| r.status == TestStatus::Fail)
+            .count();
+        let skipped = results
+            .iter()
+            .filter(|r| r.status == TestStatus::Skip)
+            .count();
 
         Self {
             total: results.len(),
             passed,
             failed,
-            skipped: 0,
+            skipped,
             duration,
             results,
         }
     }
 
     pub fn failures(&self) -> Vec<&TestResult> {
-        self.results.iter().filter(|r| !r.passed).collect()
+        self.results
+            .iter()
+            .filter(|r| r.status == TestStatus::Fail)
+            .collect()
     }
 }
