@@ -37,10 +37,12 @@ impl TestExecutor {
         let (harness_temp, harness_plugin_path) = extract_harness_plugin()?;
 
         // Parse test plugin dir from --plugin-dir
+        // Convert to absolute path to avoid issues when Claude runs in different directory
         let test_plugin_dir = plugin_dir
             .filter(|d| !d.is_empty())
             .map(PathBuf::from)
-            .filter(|p| p.exists());
+            .filter(|p| p.exists())
+            .map(|p| p.canonicalize().unwrap_or(p));
 
         // Parse log output directory
         let log_output_dir = log_output_dir.filter(|d| !d.is_empty()).map(PathBuf::from);
