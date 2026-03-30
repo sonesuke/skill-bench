@@ -32,7 +32,7 @@ pub fn check_tool_use(
     let tool_found = tool_uses.iter().any(|tool| {
         tool.get("name")
             .and_then(|n| n.as_str())
-            .map(|n| n == tool_name)
+            .map(|n| n.ends_with(tool_name))
             .unwrap_or(false)
     });
 
@@ -47,7 +47,7 @@ pub fn check_tool_use(
             .filter(|tool| {
                 tool.get("name")
                     .and_then(|n| n.as_str())
-                    .map(|n| n == tool_name)
+                    .map(|n| n.ends_with(tool_name))
                     .unwrap_or(false)
             })
             .any(|tool| {
@@ -73,7 +73,7 @@ pub fn check_tool_use(
                 .filter(|tool| {
                     tool.get("name")
                         .and_then(|n| n.as_str())
-                        .map(|n| n == tool_name)
+                        .map(|n| n.ends_with(tool_name))
                         .unwrap_or(false)
                 })
                 .any(|tool| {
@@ -124,7 +124,7 @@ pub fn check_param(
             .filter(|tool| {
                 tool.get("name")
                     .and_then(|n| n.as_str())
-                    .map(|n| n == tool_name)
+                    .map(|n| n.ends_with(tool_name))
                     .unwrap_or(false)
             })
             .collect();
