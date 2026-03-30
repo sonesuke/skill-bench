@@ -79,15 +79,82 @@ fn extract_tool_uses(content: &Value, timestamp: f64) -> Vec<TimelineEvent> {
             .unwrap_or("unknown");
         let input = item.get("input").unwrap_or(&Value::Null);
 
+        let summary = summarize_tool_input(name, input);
+
         tool_events.push(TimelineEvent {
             timestamp,
             event_type: "tool_use".to_string(),
-            content: format!("Tool: {}", name),
-            details: Some(format!("Input: {}", input)),
+            content: format!("{}: {}", name, summary),
+            details: None,
         });
     }
 
     tool_events
+}
+
+/// Build a one-line summary of a tool call's input
+fn summarize_tool_input(name: &str, input: &Value) -> String {
+    match name {
+        "Bash" => input
+            .get("command")
+            .and_then(|v| v.as_str())
+            .map(|s| truncate(s, 80))
+            .unwrap_or_else(|| truncate(&input.to_string(), 80)),
+        "Read" => input
+            .get("file_path")
+            .and_then(|v| v.as_str())
+            .map(|s| truncate(s, 80))
+            .unwrap_or_else(|| truncate(&input.to_string(), 80)),
+        "Edit" | "Write" => input
+            .get("file_path")
+            .and_then(|v| v.as_str())
+            .map(|s| truncate(s, 80))
+            .unwrap_or_else(|| truncate(&input.to_string(), 80)),
+        "Glob" => input
+            .get("pattern")
+            .and_then(|v| v.as_str())
+            .map(|s| truncate(s, 80))
+            .unwrap_or_else(|| truncate(&input.to_string(), 80)),
+        "Grep" => input
+            .get("pattern")
+            .and_then(|v| v.as_str())
+            .map(|s| truncate(s, 80))
+            .unwrap_or_else(|| truncate(&input.to_string(), 80)),
+        "Skill" => input
+            .get("skill")
+            .and_then(|v| v.as_str())
+            .map(|s| truncate(s, 80))
+            .unwrap_or_else(|| truncate(&input.to_string(), 80)),
+        "WebSearch" => input
+            .get("query")
+            .and_then(|v| v.as_str())
+            .map(|s| truncate(s, 80))
+            .unwrap_or_else(|| truncate(&input.to_string(), 80)),
+        "WebFetch" => input
+            .get("url")
+            .and_then(|v| v.as_str())
+            .map(|s| truncate(s, 80))
+            .unwrap_or_else(|| truncate(&input.to_string(), 80)),
+        "AskUserQuestion" => "(asking question)".to_string(),
+        _ => {
+            // Show first key=value pair
+            if let Some(obj) = input.as_object() {
+                if let Some((key, val)) = obj.iter().next() {
+                    return format!("{}={}", key, truncate(&val.to_string(), 60));
+                }
+            }
+            truncate(&input.to_string(), 80)
+        }
+    }
+}
+
+/// Truncate string to max_len, appending "..." if truncated
+fn truncate(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len.saturating_sub(3)])
+    }
 }
 
 /// Parse event content from log entry
@@ -104,11 +171,43 @@ fn parse_event_content(entry: &Value, event_type: &str) -> (String, Option<Strin
                 Some(format!("Model: {}", model)),
             )
         }
-        "assistant" => (
-            "Assistant: response".to_string(),
-            Some("Thinking/content".to_string()),
-        ),
-        "user" => ("User: message".to_string(), None),
+        "assistant" => {
+            // Extract text content from assistant message
+            let text = entry
+                .get("message")
+                .and_then(|m| m.get("content"))
+                .and_then(|c| c.as_array())
+                .and_then(|arr| {
+                    arr.iter()
+                        .find(|item| item.get("type").and_then(|t| t.as_str()) == Some("text"))
+                        .and_then(|item| item.get("text").and_then(|t| t.as_str()))
+                });
+            match text {
+                Some(t) => (truncate(t, 100), None),
+                None => ("(thinking)".to_string(), None),
+            }
+        }
+        "user" => {
+            // Extract text from user message (skip tool_result blobs)
+            let message = entry.get("message");
+            let text = message.and_then(|m| m.get("content")).and_then(|c| {
+                // content can be a string or an array
+                if let Some(s) = c.as_str() {
+                    Some(s.to_string())
+                } else if let Some(arr) = c.as_array() {
+                    arr.iter()
+                        .find(|item| item.get("type").and_then(|t| t.as_str()) == Some("text"))
+                        .and_then(|item| item.get("text").and_then(|t| t.as_str()))
+                        .map(|s| s.to_string())
+                } else {
+                    None
+                }
+            });
+            match text {
+                Some(t) if !t.is_empty() => (truncate(&t, 100), None),
+                _ => ("(tool_result)".to_string(), None),
+            }
+        }
         _ => (
             format!("Event: {}", event_type),
             Some("Unknown event type".to_string()),
@@ -148,6 +247,30 @@ fn load_timeline(path: &Path) -> Vec<TimelineEvent> {
                     if let Some(content) = message.get("content") {
                         let tool_uses = extract_tool_uses(content, timestamp);
                         events.extend(tool_uses);
+
+                        // Skip assistant entry if it only contains tool_use (no text)
+                        let has_text = content.as_array().is_some_and(|arr| {
+                            arr.iter().any(|item| {
+                                item.get("type").and_then(|t| t.as_str()) == Some("text")
+                            })
+                        });
+                        if !has_text {
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            // Skip user entries that are just tool_result (no text)
+            if event_type == "user" {
+                if let Some(content) = entry.get("message").and_then(|m| m.get("content")) {
+                    if let Some(arr) = content.as_array() {
+                        let has_text = arr
+                            .iter()
+                            .any(|item| item.get("type").and_then(|t| t.as_str()) == Some("text"));
+                        if !has_text {
+                            continue;
+                        }
                     }
                 }
             }
