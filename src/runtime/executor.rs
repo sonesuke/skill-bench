@@ -7,10 +7,11 @@ use crate::runtime::workspace::TestWorkspace;
 use anyhow::Result;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::{error, info, warn};
 
 /// Test executor with parallel execution support
@@ -213,6 +214,10 @@ impl TestExecutor {
     /// Execute Claude CLI
     fn execute_claude(&self, workspace: &TestWorkspace, test: &TestCase) -> Result<()> {
         let timeout = Duration::from_secs(test.timeout);
+        let test_start = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
 
         // Build command args
         let mut args = vec![
@@ -250,12 +255,49 @@ impl TestExecutor {
             .current_dir(workspace.path())
             .env("CLAUDECODE", "") // Unset to avoid nested session
             .env("SKILL_BENCH_TEST", "1")
-            .stdout(std::fs::File::create(workspace.log_path())?)
-            .stderr(std::process::Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| anyhow::anyhow!("Failed to spawn claude: {}", e))?;
 
-        // Wait with timeout
+        // Open log file for writing with timestamps
+        let log_file = std::fs::File::create(workspace.log_path())?;
+        let mut log_writer = std::io::BufWriter::new(log_file);
+
+        // Get stdout reader
+        if let Some(stdout) = child.stdout.take() {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines().map_while(Result::ok) {
+                // Add timestamp to each JSON line
+                if let Ok(mut json_val) = serde_json::from_str::<serde_json::Value>(&line) {
+                    let current_time = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs_f64();
+                    let relative_time = current_time - test_start;
+
+                    // Add timestamp field to JSON
+                    if let Some(obj) = json_val.as_object_mut() {
+                        obj.insert(
+                            "timestamp".to_string(),
+                            serde_json::Value::Number(
+                                serde_json::Number::from_f64(relative_time).unwrap(),
+                            ),
+                        );
+                    }
+
+                    if let Ok(modified_line) = serde_json::to_string(&json_val) {
+                        writeln!(log_writer, "{}", modified_line).ok();
+                    }
+                } else {
+                    // If not valid JSON, write as-is
+                    writeln!(log_writer, "{}", line).ok();
+                }
+                log_writer.flush().ok();
+            }
+        }
+
+        // Wait for process to complete
         let start = Instant::now();
         loop {
             match child.try_wait() {

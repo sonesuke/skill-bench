@@ -13,7 +13,6 @@ pub struct TimelineEvent {
     pub event_type: String,
     pub content: String,
     pub details: Option<String>,
-    pub sequence: usize, // Sequential number for events without timestamps
 }
 
 /// Display timeline to stdout
@@ -25,20 +24,14 @@ pub fn display_timeline(path: &Path, verbose: bool) -> Result<()> {
         return Ok(());
     }
 
-    let has_timestamps = events.iter().any(|e| e.timestamp > 0.0);
-    let max_sequence = events.iter().map(|e| e.sequence).max().unwrap_or(0);
+    let duration = events
+        .iter()
+        .map(|e| e.timestamp)
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .unwrap_or(0.0);
 
     println!("Timeline: {}", path.display());
-    if has_timestamps {
-        let duration = events
-            .iter()
-            .map(|e| e.timestamp)
-            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-            .unwrap_or(0.0);
-        println!("Duration: {:.2}s\n", duration);
-    } else {
-        println!("Events: {}\n", max_sequence);
-    }
+    println!("Duration: {:.2}s\n", duration);
 
     for event in &events {
         let icon = match event.event_type.as_str() {
@@ -49,12 +42,7 @@ pub fn display_timeline(path: &Path, verbose: bool) -> Result<()> {
             _ => "⚪",
         };
 
-        // Show timestamp if available, otherwise show sequence number
-        if event.timestamp > 0.0 {
-            println!("[{:.2}s] {} {}", event.timestamp, icon, event.content);
-        } else {
-            println!("[#{}] {} {}", event.sequence, icon, event.content);
-        }
+        println!("[{:.2}s] {} {}", event.timestamp, icon, event.content);
 
         if verbose {
             if let Some(ref details) = event.details {
@@ -79,11 +67,14 @@ fn load_timeline(path: &Path) -> Vec<TimelineEvent> {
 
     let reader = BufReader::new(file);
     let mut events = Vec::new();
-    let mut sequence = 0;
 
-    // Since logs don't have reliable timestamps, use sequence numbers
     for line in reader.lines().map_while(Result::ok) {
         if let Ok(entry) = serde_json::from_str::<Value>(&line) {
+            let timestamp = entry
+                .get("timestamp")
+                .and_then(|t| t.as_f64())
+                .unwrap_or(0.0);
+
             let event_type = entry
                 .get("type")
                 .and_then(|t| t.as_str())
@@ -116,13 +107,11 @@ fn load_timeline(path: &Path) -> Vec<TimelineEvent> {
                                                 .and_then(|n| n.as_str())
                                                 .unwrap_or("unknown");
                                             let input = item.get("input").unwrap_or(&Value::Null);
-                                            sequence += 1;
                                             events.push(TimelineEvent {
-                                                timestamp: 0.0,
+                                                timestamp,
                                                 event_type: "tool_use".to_string(),
                                                 content: format!("Tool: {}", name),
                                                 details: Some(format!("Input: {}", input)),
-                                                sequence,
                                             });
                                         }
                                     }
@@ -142,13 +131,11 @@ fn load_timeline(path: &Path) -> Vec<TimelineEvent> {
                 ),
             };
 
-            sequence += 1;
             events.push(TimelineEvent {
-                timestamp: 0.0,
+                timestamp,
                 event_type: event_type.to_string(),
                 content,
                 details,
-                sequence,
             });
         }
     }
