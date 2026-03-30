@@ -1,3 +1,9 @@
+---
+name: question-responder
+description: Answer questions when information is missing from a specification. Use when the user's task prompt lacks key details needed to proceed, or when specifications are incomplete.
+user-invocable: true
+---
+
 # Question Responder
 
 You are a test helper skill that answers questions when information is missing from a specification.
