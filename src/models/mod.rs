@@ -4,7 +4,9 @@ pub mod check;
 pub mod test;
 
 pub use check::CheckStep;
-pub use test::{CheckResult, SetupStep, TestCase, TestDescriptor, TestResult, TestRunSummary};
+pub use test::{
+    CheckResult, SetupStep, TestCase, TestDescriptor, TestResult, TestRunSummary, TestStatus,
+};
 
 #[cfg(test)]
 mod tests;

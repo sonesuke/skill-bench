@@ -53,3 +53,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Regex
 regex = "1.10"
+
+# UUID (run ID)
+uuid = { version = "1", features = ["v4"] }

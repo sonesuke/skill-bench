@@ -57,7 +57,7 @@ impl TestHistory {
         self.failed_tests.clear();
 
         for result in results {
-            if !result.passed {
+            if !result.is_pass() {
                 self.failed_tests.push(FailedTestRecord {
                     test_id: result.test_id.clone(),
                     test_name: result.test_name.clone(),

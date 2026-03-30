@@ -10,8 +10,13 @@ use anyhow::Result;
 use clap::Parser;
 use cli::{Cli, Commands};
 use models::TestRunSummary;
+use output::{
+    print_failed_details, print_run_header, print_separator, print_summary_line, LivePrinter,
+};
 use runtime::{TestDiscovery, TestExecutor};
 use state::TestHistory;
+use std::collections::HashSet;
+use std::time::Instant;
 
 /// Configuration for running tests
 struct TestConfig {
@@ -73,18 +78,14 @@ fn run_tests(config: TestConfig) -> Result<()> {
     let discovery = TestDiscovery::new(config.pattern);
     let mut tests = discovery.discover()?;
 
-    println!("Discovered {} tests", tests.len());
-
     // Apply filters
     if let Some(skill_name) = config.skill {
         tests.retain(|t| t.skill_name == skill_name);
-        println!("Filtered by skill: {}", skill_name);
     }
 
     if let Some(filter_pattern) = config.filter {
         let regex = regex::Regex::new(&filter_pattern)?;
         tests.retain(|t| regex.is_match(&t.test_name));
-        println!("Filtered by pattern: {}", filter_pattern);
     }
 
     // Handle --rerun-failed
@@ -112,17 +113,47 @@ fn run_tests(config: TestConfig) -> Result<()> {
         return Ok(());
     }
 
-    println!();
+    // Count unique skills
+    let skill_count: HashSet<String> = tests.iter().map(|t| t.skill_name.clone()).collect();
 
-    // Execute tests
+    // Generate run ID
+    let run_id = uuid::Uuid::new_v4();
+
+    // Print header
+    print_run_header(&run_id, tests.len(), skill_count.len());
+
+    // Create live printer
+    let printer = LivePrinter::new();
+
+    // Execute tests with real-time output
     let executor = TestExecutor::new(config.threads, Some(config.log.clone()), config.plugin_dir)?;
-    let results = executor.execute_tests(tests)?;
-
-    // Create summary
-    let summary = TestRunSummary::from_results(results);
+    let run_start = Instant::now();
+    let results = executor.execute_tests(tests, {
+        let printer = printer.clone();
+        move |result| printer.print_test_result(result)
+    })?;
+    let wall_clock = run_start.elapsed();
 
     // Print summary
-    print_summary(&summary);
+    let summary = TestRunSummary::from_results(results);
+
+    println!();
+    print_separator();
+    print_summary_line(
+        wall_clock,
+        summary.total,
+        summary.passed,
+        summary.failed,
+        summary.skipped,
+    );
+
+    // Print failed test details
+    let failures = summary.failures();
+    if !failures.is_empty() {
+        print_failed_details(&failures);
+    }
+
+    println!();
 
     // Update history
     let mut history = TestHistory::load();
@@ -149,41 +180,4 @@ fn list_tests(pattern: String) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn print_summary(summary: &TestRunSummary) {
-    println!();
-    println!("═{}═", "═".repeat(50));
-    println!("SkillBench Test Results");
-    println!("═{}═", "═".repeat(50));
-    println!(
-        "Total: {} | Pass: {} | Fail: {}",
-        summary.total, summary.passed, summary.failed
-    );
-    println!("Duration: {:.2}s", summary.duration.as_secs_f64());
-
-    // List failed tests
-    if !summary.failures().is_empty() {
-        println!();
-        println!("Failed Tests:");
-        for failure in summary.failures() {
-            println!(
-                "  ❌ {}/{} ({:.2}s)",
-                failure.skill_name,
-                failure.test_name,
-                failure.duration.as_secs_f64()
-            );
-
-            // Show failed checks
-            for check_result in &failure.check_results {
-                if !check_result.passed {
-                    if let Some(ref error) = check_result.error {
-                        println!("    - {}: {}", check_result.name, error);
-                    }
-                }
-            }
-        }
-    }
-
-    println!("═{}═", "═".repeat(50));
 }
