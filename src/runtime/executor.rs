@@ -2,7 +2,7 @@
 
 use crate::assertions::AssertionChecker;
 use crate::models::{CheckResult, TestCase, TestDescriptor, TestResult, TestStatus};
-use crate::runtime::embedded::extract_harness_plugin;
+use crate::runtime::embedded::extract_harness_plugin_with_answers;
 use crate::runtime::workspace::TestWorkspace;
 use anyhow::Result;
 use rayon::prelude::*;
@@ -18,8 +18,6 @@ use tracing::{error, info, warn};
 pub struct TestExecutor {
     threads: usize,
     claude_path: PathBuf,
-    _plugin_temp_dir: Option<tempfile::TempDir>, // Kept alive for lifetime of TestExecutor
-    harness_plugin: Arc<PathBuf>,
     test_plugin_dir: Option<PathBuf>,
     log_output_dir: Option<PathBuf>,
 }
@@ -33,9 +31,6 @@ impl TestExecutor {
     ) -> Result<Self> {
         // Find claude binary
         let claude_path = which::which("claude").unwrap_or_else(|_| PathBuf::from("claude"));
-
-        // Extract harness plugin (always needed for question-responder)
-        let (harness_temp, harness_plugin_path) = extract_harness_plugin()?;
 
         // Parse test plugin dir from --plugin-dir
         // Convert to absolute path to avoid issues when Claude runs in different directory
@@ -51,8 +46,6 @@ impl TestExecutor {
         Ok(Self {
             threads,
             claude_path,
-            _plugin_temp_dir: Some(harness_temp),
-            harness_plugin: Arc::new(harness_plugin_path),
             test_plugin_dir,
             log_output_dir,
         })
@@ -237,35 +230,40 @@ impl TestExecutor {
             .as_secs_f64();
 
         // Build command args
-        let mut args = vec![
-            "-p",
-            "--dangerously-skip-permissions",
-            "--verbose",
-            "--output-format",
-            "stream-json",
+        let mut args: Vec<String> = vec![
+            "-p".to_string(),
+            "--dangerously-skip-permissions".to_string(),
+            "--verbose".to_string(),
+            "--output-format".to_string(),
+            "stream-json".to_string(),
         ];
 
-        // Add harness plugin only if test has [answers] section
-        if test.answers.is_some() {
-            let plugin_dir = self
-                .harness_plugin
+        // Add harness plugin with answers if test has [answers] section
+        // TempDir is kept alive in this scope so the directory persists during execution
+        let _harness_temp = if let Some(ref answers) = test.answers {
+            let (temp_dir, plugin_path) = extract_harness_plugin_with_answers(answers)?;
+            let plugin_dir = plugin_path
                 .to_str()
-                .ok_or_else(|| anyhow::anyhow!("Invalid plugin path"))?;
-            args.push("--plugin-dir");
+                .ok_or_else(|| anyhow::anyhow!("Invalid plugin path"))?
+                .to_string();
+            args.push("--plugin-dir".to_string());
             args.push(plugin_dir);
-        }
+            Some(temp_dir)
+        } else {
+            None
+        };
 
         // Add test plugin if specified via --plugin-dir
         if let Some(ref test_plugin) = self.test_plugin_dir {
             let test_plugin_str = test_plugin
                 .to_str()
                 .ok_or_else(|| anyhow::anyhow!("Invalid test plugin path"))?;
-            args.push("--plugin-dir");
-            args.push(test_plugin_str);
+            args.push("--plugin-dir".to_string());
+            args.push(test_plugin_str.to_string());
         }
 
-        args.push("--");
-        args.push(test.test_prompt.trim());
+        args.push("--".to_string());
+        args.push(test.test_prompt.trim().to_string());
 
         let mut child = Command::new(&self.claude_path)
             .args(&args)
