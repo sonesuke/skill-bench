@@ -151,8 +151,7 @@ command = "mkdir -p subdir && echo 'done' > subdir/file.txt"
 
 [[checks]]
 name = "check_name"
-command = "skill-invoked"
-skill = "skill-name"
+command = { command = "skill-invoked", skill = "skill-name" }
 
 [answers]
 "question_key" = "answer_value"
@@ -180,49 +179,98 @@ name = "optional-descriptive-name"
 command = "echo 'Hello' > greeting.txt && mkdir -p output"
 ```
 
-## Assertion Reference
+## Check Reference
 
-Assertions use structured TOML format:
+Run `skill-bench help <type>` for detailed help on any check type.
 
 ### Skill Verification
-- `skill-loaded` - Skill was loaded
-- `skill-invoked` - Skill was invoked
-- `skill-not-invoked` - Skill was NOT invoked
+
+- `skill-loaded` — Skill was loaded
+- `skill-invoked` — Skill was invoked
+
+```toml
+[[checks]]
+name = "check-name"
+command = { command = "skill-invoked", skill = "my-skill" }
+```
 
 ### MCP Verification
-- `mcp-loaded` - MCP server was loaded
-- `mcp-tool-invoked` - MCP tool was invoked
-- `mcp-success` - MCP tool succeeded
+
+- `mcp-loaded` — MCP server was loaded
+- `mcp-tool-invoked` — MCP tool was invoked
+- `mcp-success` — MCP tool succeeded
+
+```toml
+[[checks]]
+name = "check-name"
+command = { command = "mcp-loaded", server = "filesystem" }
+```
 
 ### Tool Verification
-- `tool-use` - Tool was used
-- `param` - Parameter value verification
+
+- `tool-use` — Tool was called (partial match)
+- `tool-param` — Tool was called with a specific parameter
+
+```toml
+[[checks]]
+name = "check-name"
+command = { command = "tool-use", tool = "Read" }
+
+[[checks]]
+name = "check-param"
+command = { command = "tool-param", tool = "Read", param = "file_path", value = "test.txt" }
+```
 
 ### File Verification
-- `file-content` - Verify file content
-- `file-contains` - File contains string
-- `workspace-file` - File exists
-- `workspace-dir` - Directory exists
+
+- `workspace-file` — File exists in workspace
+- `workspace-dir` — Directory exists in workspace
+- `file-contains` — File contains string
+
+```toml
+[[checks]]
+name = "check-name"
+command = { command = "workspace-file", path = "output.txt" }
+
+[[checks]]
+name = "check-content"
+command = { command = "file-contains", file = "output.txt", contains = "expected text" }
+```
 
 ### Log Verification
-- `output-contains` - Output contains string
-- `log-contains` - Log contains pattern
-- `text-contains` - Text content search
+
+- `log-contains` — Log contains regex pattern
+- `message-contains` — Assistant output contains text
+
+```toml
+[[checks]]
+name = "check-name"
+command = { command = "log-contains", pattern = "error|failed" }
+
+[[checks]]
+name = "check-output"
+command = { command = "message-contains", text = "expected output" }
+```
 
 ### Database Verification
-- `db-query` - SQL query result verification
+
+- `db-query` — SQL query result verification
   - Numeric comparisons: `">0"`, `">=5"`, `"=10"`, `"<3"`, `"<=2"`
+
+```toml
+[[checks]]
+name = "check-name"
+command = { command = "db-query", db = "patents.db", query = "SELECT COUNT(*) FROM patents", expected = ">0" }
+```
 
 ### Negative Assertions
 
-Use `deny = true` on any assertion for negative verification:
+Use `deny = true` on any check to invert the assertion:
 
 ```toml
 [[checks]]
 name = "should-not-contain-error"
-command = "file-contains"
-file = "output.txt"
-contains = "error"
+command = { command = "file-contains", file = "output.txt", contains = "error" }
 deny = true
 ```
 
