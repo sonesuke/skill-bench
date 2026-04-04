@@ -3,6 +3,7 @@ set -eu
 
 REPO="sonesuke/skill-bench"
 GITHUB="https://github.com"
+API="https://api.github.com"
 
 main() {
   get_os
@@ -73,7 +74,7 @@ install() {
 }
 
 get_latest_tag() {
-  curl -fsSL "${GITHUB}/api/repos/${REPO}/releases/latest" \
+  curl -fsSL "${API}/repos/${REPO}/releases/latest" \
     | grep '"tag_name"' \
     | head -1 \
     | sed -E 's/.*"([^"]+)".*/\1/'
