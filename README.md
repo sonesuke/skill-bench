@@ -133,11 +133,15 @@ test_prompt = """
 Test prompt here...
 """
 
+# Setup steps (executed in order before the test)
 [[setup]]
-name = "setup_name"
-type = "file"
+name = "create-sample-file"
 path = "test.txt"
 content = "File content"
+
+[[setup]]
+name = "prepare-directory"
+command = "mkdir -p subdir && echo 'done' > subdir/file.txt"
 
 [[checks]]
 name = "check_name"
@@ -146,6 +150,28 @@ skill = "skill-name"
 
 [answers]
 "question_key" = "answer_value"
+```
+
+### Setup Reference
+
+Setup steps run in the test workspace before the test prompt is executed. Steps are executed in the order they appear. If any step fails, the entire test fails.
+
+Two types are supported, distinguished automatically by the fields present:
+
+- **File** (`path` + `content`) — Creates a file (and any missing parent directories) in the workspace
+- **Script** (`command`) — Executes a shell command via `bash -c` in the workspace
+
+```toml
+# File setup
+[[setup]]
+name = "optional-descriptive-name"
+path = "dir/subdir/file.txt"
+content = "File content here"
+
+# Script setup
+[[setup]]
+name = "optional-descriptive-name"
+command = "echo 'Hello' > greeting.txt && mkdir -p output"
 ```
 
 ## Assertion Reference
