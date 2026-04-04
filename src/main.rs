@@ -2,6 +2,7 @@ mod assertions;
 mod cli;
 mod models;
 mod output;
+mod reference;
 mod runtime;
 mod state;
 mod timeline;
@@ -67,6 +68,9 @@ async fn main() -> Result<()> {
         }
         Commands::Timeline { log_file, verbose } => {
             timeline::display_timeline(&log_file, verbose)?;
+        }
+        Commands::Help { check_type } => {
+            reference::print_help(check_type.as_deref())?;
         }
     }
 
