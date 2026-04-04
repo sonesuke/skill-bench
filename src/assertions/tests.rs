@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod tests {
     use crate::assertions::AssertionChecker;
+    use crate::models::check::CheckData;
     use std::path::Path;
 
     fn create_checker(log_file: &str) -> AssertionChecker {
@@ -258,6 +259,53 @@ mod tests {
             checker.log_data.len(),
             0,
             "nonexistent log should produce empty data"
+        );
+    }
+
+    #[test]
+    fn test_file_contains_via_evaluate_check() {
+        let work_dir = tempfile::tempdir().unwrap();
+        let test_file = work_dir.path().join("report.md");
+        std::fs::write(&test_file, "Screened patents: 42").unwrap();
+
+        let empty_log = work_dir.path().join("empty.log");
+        std::fs::write(&empty_log, "").unwrap();
+
+        let checker = AssertionChecker::new(&empty_log, work_dir.path(), None);
+
+        let check = crate::models::CheckStep {
+            name: "contains_patent_data".to_string(),
+            command: CheckData {
+                command: "file-contains".to_string(),
+                file: Some("report.md".to_string()),
+                contains: Some("Screened patents".to_string()),
+                ..Default::default()
+            },
+            deny: false,
+        };
+
+        let result = checker.evaluate_check(&check);
+        assert!(
+            result.is_ok(),
+            "file-contains should pass when string is present"
+        );
+
+        // String not in file should fail
+        let check_missing = crate::models::CheckStep {
+            name: "contains_missing".to_string(),
+            command: CheckData {
+                command: "file-contains".to_string(),
+                file: Some("report.md".to_string()),
+                contains: Some("NOTPRESENT".to_string()),
+                ..Default::default()
+            },
+            deny: false,
+        };
+
+        let result = checker.evaluate_check(&check_missing);
+        assert!(
+            result.is_err(),
+            "file-contains should fail when string is absent"
         );
     }
 }

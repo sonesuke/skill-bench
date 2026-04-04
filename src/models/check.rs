@@ -13,7 +13,7 @@ pub struct CheckStep {
 }
 
 /// Check data - command type and arguments
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct CheckData {
     pub command: String,
     #[serde(default)]
