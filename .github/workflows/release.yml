@@ -45,6 +45,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Setup Rust cache
+        if: matrix.use_cross != true
         uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
