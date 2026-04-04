@@ -9,7 +9,7 @@ mod tests {
     fn create_checker(log_file: &str) -> AssertionChecker {
         let log_path = Path::new(log_file);
         let work_dir = tempfile::tempdir().unwrap();
-        AssertionChecker::new(log_path, work_dir.path(), None)
+        AssertionChecker::new(log_path, work_dir.path(), None, None)
     }
 
     #[test]
@@ -198,7 +198,7 @@ mod tests {
         let empty_log = work_dir.path().join("empty.log");
         std::fs::write(&empty_log, "").unwrap();
 
-        let checker = AssertionChecker::new(&empty_log, work_dir.path(), None);
+        let checker = AssertionChecker::new(&empty_log, work_dir.path(), None, None);
         let init = checker.init_message();
         assert!(init.is_none(), "empty log should not have init message");
     }
@@ -254,7 +254,7 @@ mod tests {
         let nonexistent_log = work_dir.path().join("nonexistent.log");
 
         // Should not panic, just return empty checker
-        let checker = AssertionChecker::new(&nonexistent_log, work_dir.path(), None);
+        let checker = AssertionChecker::new(&nonexistent_log, work_dir.path(), None, None);
         assert_eq!(
             checker.log_data.len(),
             0,
@@ -271,7 +271,7 @@ mod tests {
         let empty_log = work_dir.path().join("empty.log");
         std::fs::write(&empty_log, "").unwrap();
 
-        let checker = AssertionChecker::new(&empty_log, work_dir.path(), None);
+        let checker = AssertionChecker::new(&empty_log, work_dir.path(), None, None);
 
         let check = crate::models::CheckStep {
             name: "contains_patent_data".to_string(),
@@ -307,5 +307,44 @@ mod tests {
             result.is_err(),
             "file-contains should fail when string is absent"
         );
+    }
+
+    #[test]
+    fn test_copy_to_output_creates_subdirectory() {
+        let work_dir = tempfile::tempdir().unwrap();
+        let output_dir = tempfile::tempdir().unwrap();
+        let test_file = work_dir.path().join("output.txt");
+        std::fs::write(&test_file, "test content").unwrap();
+
+        let empty_log = work_dir.path().join("empty.log");
+        std::fs::write(&empty_log, "").unwrap();
+
+        let checker = AssertionChecker::new(
+            &empty_log,
+            work_dir.path(),
+            Some(output_dir.path()),
+            Some("skill_test_20260404_050943"),
+        );
+
+        let check = crate::models::CheckStep {
+            name: "copy_file".to_string(),
+            command: CheckData {
+                command: "workspace-file".to_string(),
+                path: Some("output.txt".to_string()),
+                copy_to_output: Some(true),
+                ..Default::default()
+            },
+            deny: false,
+        };
+
+        let result = checker.evaluate_check(&check);
+        assert!(result.is_ok(), "workspace-file with copy should pass");
+
+        let copied = output_dir
+            .path()
+            .join("skill_test_20260404_050943/output.txt");
+        assert!(copied.exists(), "file should be copied to subdirectory");
+        let content = std::fs::read_to_string(&copied).unwrap();
+        assert_eq!(content, "test content", "copied content should match");
     }
 }
