@@ -26,18 +26,14 @@ fn extract_harness_plugin_inner(
     fs::write(claude_plugin_dir.join("plugin.json"), plugin_json)?;
 
     // skills/question-responder/SKILL.md (with optional answers)
-    let skill_md_template =
-        include_bytes!("../assets/harness-plugin/skills/question-responder/SKILL.md");
+    let skill_md_template = include_bytes!("../assets/harness-plugin/skills/question-responder/SKILL.md");
     let skill_md = String::from_utf8_lossy(skill_md_template);
 
     let skill_md = if let Some(answers) = answers {
         let answers_section = format_answers_section(answers);
         skill_md.replace("{{ANSWERS_SECTION}}", &answers_section)
     } else {
-        skill_md.replace(
-            "{{ANSWERS_SECTION}}",
-            "No pre-configured answers available for this test.",
-        )
+        skill_md.replace("{{ANSWERS_SECTION}}", "No pre-configured answers available for this test.")
     };
 
     let skill_dir = plugin_dir.join("skills").join("question-responder");
@@ -49,9 +45,7 @@ fn extract_harness_plugin_inner(
 
 /// Format answers HashMap into a markdown section
 fn format_answers_section(answers: &HashMap<String, toml::Value>) -> String {
-    let mut lines = String::from(
-        "## Available Answers\n\nThe following information is available for this test:\n\n",
-    );
+    let mut lines = String::from("## Available Answers\n\nThe following information is available for this test:\n\n");
 
     for (key, value) in answers {
         let formatted = match value {
