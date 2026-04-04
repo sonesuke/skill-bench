@@ -87,7 +87,7 @@ impl AssertionChecker {
             "file-contains" => {
                 let file = check.command.file.as_ref().ok_or("Missing file")?;
                 let contains = check.command.contains.as_ref().ok_or("Missing contains")?;
-                file::check_file_content(&self.work_dir, file, contains, false)
+                file::check_file_content(&self.work_dir, file, contains, true)
             }
             "log-contains" => {
                 let pattern = check.command.pattern.as_ref().ok_or("Missing pattern")?;
