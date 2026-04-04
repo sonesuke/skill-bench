@@ -1,3 +1,4 @@
+---
 name: Release
 
 on:
@@ -14,20 +15,26 @@ concurrency:
 
 jobs:
   build:
-    name: Build ${{ matrix.target }}
+    name: Build ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
+            platform: linux-x86_64
             target: x86_64-unknown-linux-gnu
-            artifact: skill-bench-x86_64-linux
-          - os: ubuntu-latest
+            archive_name: skill-bench-linux-x86_64.tar.gz
+
+          - os: ubuntu-22.04
+            platform: linux-arm64
             target: aarch64-unknown-linux-gnu
-            artifact: skill-bench-aarch64-linux
+            archive_name: skill-bench-linux-arm64.tar.gz
+            use_cross: true
+
           - os: macos-latest
+            platform: macos-arm64
             target: aarch64-apple-darwin
-            artifact: skill-bench-aarch64-macos
+            archive_name: skill-bench-macos-arm64.tar.gz
 
     steps:
       - uses: actions/checkout@v6
@@ -41,27 +48,29 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
-          cache-on-failure: true
 
-      - name: Install cross-compilation tools (Linux ARM)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
+      - name: Install cross
+        if: matrix.use_cross == true
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      - name: Build binary
-        run: cargo build --release --target ${{ matrix.target }}
+          if [ "${{ matrix.use_cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
 
       - name: Prepare artifact
         run: |
           cd target/${{ matrix.target }}/release
-          tar czf ../../../skill-bench-${{ matrix.artifact }}.tar.gz skill-bench
+          tar czf ${{ github.workspace }}/${{ matrix.archive_name }} skill-bench
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.artifact }}
-          path: skill-bench-${{ matrix.artifact }}.tar.gz
+          name: ${{ matrix.platform }}
+          path: ${{ matrix.archive_name }}
 
   release:
     name: Create Release
