@@ -25,7 +25,7 @@ get_arch() {
   arch="$(uname -m)"
   case "$arch" in
     x86_64|amd64) arch="x86_64" ;;
-    aarch64|arm64) arch="aarch64" ;;
+    aarch64|arm64) arch="arm64" ;;
     *) fail "Unsupported architecture: $arch" ;;
   esac
 }
@@ -42,7 +42,7 @@ need() {
 
 download() {
   tag="$(get_latest_tag)"
-  artifact="skill-bench-${arch}-${os}"
+  artifact="skill-bench-${os}-${arch}"
   url="${GITHUB}/${REPO}/releases/download/${tag}/${artifact}.tar.gz"
 
   printf "Downloading skill-bench %s (%s/%s) ...\n" "$tag" "$os" "$arch"
