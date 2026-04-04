@@ -23,15 +23,17 @@ pub struct AssertionChecker {
     #[cfg(not(test))]
     log_data: Vec<Value>,
     work_dir: std::path::PathBuf,
+    log_output_dir: Option<std::path::PathBuf>,
 }
 
 impl AssertionChecker {
     /// Create a new assertion checker
-    pub fn new(log_file: &Path, work_dir: &Path) -> Self {
+    pub fn new(log_file: &Path, work_dir: &Path, log_output_dir: Option<&Path>) -> Self {
         let log_data = Self::load_log_file(log_file);
         Self {
             log_data,
             work_dir: work_dir.to_path_buf(),
+            log_output_dir: log_output_dir.map(|p| p.to_path_buf()),
         }
     }
 
@@ -71,7 +73,12 @@ impl AssertionChecker {
         let result = match cmd.as_str() {
             "workspace-file" => {
                 let path = check.command.path.as_ref().ok_or("Missing path")?;
-                file::check_workspace_file(&self.work_dir, path)
+                file::check_workspace_file(
+                    &self.work_dir,
+                    path,
+                    check.command.copy_to_output.unwrap_or(false),
+                    self.log_output_dir.as_deref(),
+                )
             }
             "workspace-dir" => {
                 let path = check.command.path.as_ref().ok_or("Missing path")?;

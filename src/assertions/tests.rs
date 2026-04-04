@@ -8,7 +8,7 @@ mod tests {
     fn create_checker(log_file: &str) -> AssertionChecker {
         let log_path = Path::new(log_file);
         let work_dir = tempfile::tempdir().unwrap();
-        AssertionChecker::new(log_path, work_dir.path())
+        AssertionChecker::new(log_path, work_dir.path(), None)
     }
 
     #[test]
@@ -132,11 +132,20 @@ mod tests {
         let test_file = work_dir.path().join("output.txt");
         std::fs::write(&test_file, "test content").unwrap();
 
-        let result = crate::assertions::file::check_workspace_file(work_dir.path(), "output.txt");
+        let result = crate::assertions::file::check_workspace_file(
+            work_dir.path(),
+            "output.txt",
+            false,
+            None,
+        );
         assert!(result.is_ok(), "workspace file should exist");
 
-        let result =
-            crate::assertions::file::check_workspace_file(work_dir.path(), "nonexistent.txt");
+        let result = crate::assertions::file::check_workspace_file(
+            work_dir.path(),
+            "nonexistent.txt",
+            false,
+            None,
+        );
         assert!(result.is_err(), "nonexistent file should not exist");
     }
 
@@ -188,7 +197,7 @@ mod tests {
         let empty_log = work_dir.path().join("empty.log");
         std::fs::write(&empty_log, "").unwrap();
 
-        let checker = AssertionChecker::new(&empty_log, work_dir.path());
+        let checker = AssertionChecker::new(&empty_log, work_dir.path(), None);
         let init = checker.init_message();
         assert!(init.is_none(), "empty log should not have init message");
     }
@@ -244,7 +253,7 @@ mod tests {
         let nonexistent_log = work_dir.path().join("nonexistent.log");
 
         // Should not panic, just return empty checker
-        let checker = AssertionChecker::new(&nonexistent_log, work_dir.path());
+        let checker = AssertionChecker::new(&nonexistent_log, work_dir.path(), None);
         assert_eq!(
             checker.log_data.len(),
             0,
