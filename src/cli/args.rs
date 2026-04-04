@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 #[command(name = "skill-bench")]
 #[command(about = "TOML-based test runner for skill testing", long_about = None)]
 #[command(version)]
+#[command(disable_help_subcommand = true)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -56,6 +57,11 @@ pub enum Commands {
         /// Show detailed output
         #[arg(short, long)]
         verbose: bool,
+    },
+    /// Show reference for check types and setup
+    Help {
+        /// Check type or "setup" (e.g., skill-invoked, file-contains, db-query)
+        check_type: Option<String>,
     },
 }
 
