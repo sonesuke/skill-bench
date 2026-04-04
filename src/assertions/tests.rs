@@ -9,7 +9,7 @@ mod tests {
     fn create_checker(log_file: &str) -> AssertionChecker {
         let log_path = Path::new(log_file);
         let work_dir = tempfile::tempdir().unwrap();
-        AssertionChecker::new(log_path, work_dir.path(), None)
+        AssertionChecker::new(log_path, work_dir.path(), None, None)
     }
 
     #[test]
@@ -198,7 +198,7 @@ mod tests {
         let empty_log = work_dir.path().join("empty.log");
         std::fs::write(&empty_log, "").unwrap();
 
-        let checker = AssertionChecker::new(&empty_log, work_dir.path(), None);
+        let checker = AssertionChecker::new(&empty_log, work_dir.path(), None, None);
         let init = checker.init_message();
         assert!(init.is_none(), "empty log should not have init message");
     }
@@ -254,7 +254,7 @@ mod tests {
         let nonexistent_log = work_dir.path().join("nonexistent.log");
 
         // Should not panic, just return empty checker
-        let checker = AssertionChecker::new(&nonexistent_log, work_dir.path(), None);
+        let checker = AssertionChecker::new(&nonexistent_log, work_dir.path(), None, None);
         assert_eq!(
             checker.log_data.len(),
             0,
@@ -271,7 +271,7 @@ mod tests {
         let empty_log = work_dir.path().join("empty.log");
         std::fs::write(&empty_log, "").unwrap();
 
-        let checker = AssertionChecker::new(&empty_log, work_dir.path(), None);
+        let checker = AssertionChecker::new(&empty_log, work_dir.path(), None, None);
 
         let check = crate::models::CheckStep {
             name: "contains_patent_data".to_string(),

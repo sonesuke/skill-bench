@@ -28,12 +28,26 @@ pub struct AssertionChecker {
 
 impl AssertionChecker {
     /// Create a new assertion checker
-    pub fn new(log_file: &Path, work_dir: &Path, log_output_dir: Option<&Path>) -> Self {
+    pub fn new(
+        log_file: &Path,
+        work_dir: &Path,
+        log_output_dir: Option<&Path>,
+        output_subdir: Option<&str>,
+    ) -> Self {
         let log_data = Self::load_log_file(log_file);
+        let log_output_dir = log_output_dir.map(|p| {
+            let dir = if let Some(sub) = output_subdir {
+                p.join(sub)
+            } else {
+                p.to_path_buf()
+            };
+            std::fs::create_dir_all(&dir).ok();
+            dir
+        });
         Self {
             log_data,
             work_dir: work_dir.to_path_buf(),
-            log_output_dir: log_output_dir.map(|p| p.to_path_buf()),
+            log_output_dir,
         }
     }
 

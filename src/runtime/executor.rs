@@ -155,8 +155,16 @@ impl TestExecutor {
         }
 
         // Run assertions
-        let checker =
-            AssertionChecker::new(&log_path, workspace.path(), self.log_output_dir.as_deref());
+        let output_subdir = self.log_output_dir.as_ref().map(|_| {
+            let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+            format!("{}_{}_{timestamp}", desc.skill_name, desc.test_name)
+        });
+        let checker = AssertionChecker::new(
+            &log_path,
+            workspace.path(),
+            self.log_output_dir.as_deref(),
+            output_subdir.as_deref(),
+        );
         let check_results: Vec<CheckResult> = desc
             .test
             .checks
