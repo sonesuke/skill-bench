@@ -144,7 +144,8 @@ impl TestExecutor {
         }
 
         // Run assertions
-        let checker = AssertionChecker::new(&log_path, workspace.path());
+        let checker =
+            AssertionChecker::new(&log_path, workspace.path(), self.log_output_dir.as_deref());
         let check_results: Vec<CheckResult> = desc
             .test
             .checks

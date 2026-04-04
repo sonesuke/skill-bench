@@ -44,4 +44,6 @@ pub struct CheckData {
     pub query: Option<String>,
     #[serde(default)]
     pub deny: Option<bool>,
+    #[serde(default)]
+    pub copy_to_output: Option<bool>,
 }

@@ -43,14 +43,39 @@ pub fn check_file_content(
 }
 
 /// Check if workspace file exists
-pub fn check_workspace_file(work_dir: &Path, file_path: &str) -> Result<(), String> {
+pub fn check_workspace_file(
+    work_dir: &Path,
+    file_path: &str,
+    copy_to_output: bool,
+    log_output_dir: Option<&Path>,
+) -> Result<(), String> {
     let full_path = work_dir.join(file_path);
 
-    if full_path.exists() && full_path.is_file() {
-        Ok(())
-    } else {
-        Err(format!("Workspace file '{}' does not exist", file_path))
+    if !(full_path.exists() && full_path.is_file()) {
+        return Err(format!("Workspace file '{}' does not exist", file_path));
     }
+
+    // Copy file to output directory if requested
+    if copy_to_output {
+        if let Some(output_dir) = log_output_dir {
+            if let Err(e) = copy_file_to_dir(&full_path, file_path, output_dir) {
+                return Err(format!("Failed to copy '{}' to output: {}", file_path, e));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Copy a file to the output directory, preserving its relative path structure
+fn copy_file_to_dir(source: &Path, relative_path: &str, output_dir: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(output_dir)?;
+    let dest = output_dir.join(relative_path);
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::copy(source, &dest)?;
+    Ok(())
 }
 
 /// Check if workspace directory exists
