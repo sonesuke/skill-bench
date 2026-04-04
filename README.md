@@ -18,13 +18,19 @@ Distributable as a standalone binary - users don't need a Rust environment.
 
 ## Installation
 
+### Quick install (Linux / macOS)
+
 ```bash
-# Build from source
+curl -fsSL https://raw.githubusercontent.com/sonesuke/skill-bench/main/scripts/setup.sh | sh
+```
+
+Supports Linux (x86_64, aarch64) and macOS (aarch64).
+
+### Build from source
+
+```bash
 cargo build --release
 cargo install --path .
-
-# Or download the binary and add to PATH
-cp target/release/skill-bench ~/.local/bin/
 ```
 
 ## Usage
