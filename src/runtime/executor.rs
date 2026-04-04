@@ -123,9 +123,20 @@ impl TestExecutor {
             };
         }
 
+        // Determine log output directory: --log, default (.skill-bench/logs), or temp workspace
+        let output_dir = if let Some(ref dir) = self.log_output_dir {
+            dir.clone()
+        } else {
+            std::path::PathBuf::from(".skill-bench/logs")
+        };
+        let _ = std::fs::create_dir_all(&output_dir);
+
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        let filename = format!("{}_{}_{}.log", desc.skill_name, desc.test_name, timestamp);
+        let log_path = output_dir.join(&filename);
+
         // Execute Claude CLI
-        let log_path = workspace.log_path().to_path_buf();
-        match self.execute_claude(&workspace, &desc.test) {
+        match self.execute_claude(&workspace, &desc.test, &log_path) {
             Ok(_) => {
                 info!("Claude execution completed for {}", desc.test_id);
             }
@@ -166,13 +177,6 @@ impl TestExecutor {
             })
             .collect();
 
-        // Copy log to output directory if specified
-        if let Some(ref output_dir) = self.log_output_dir {
-            if let Err(e) = self.copy_log_to_output(&log_path, output_dir, &desc) {
-                warn!("Failed to copy log for {}: {}", desc.test_id, e);
-            }
-        }
-
         let passed = check_results.iter().all(|r| r.passed);
         let status = if passed {
             TestStatus::Pass
@@ -199,30 +203,13 @@ impl TestExecutor {
         }
     }
 
-    /// Copy log file to output directory
-    fn copy_log_to_output(
-        &self,
-        log_path: &PathBuf,
-        output_dir: &PathBuf,
-        desc: &TestDescriptor,
-    ) -> Result<()> {
-        // Create output directory if it doesn't exist
-        std::fs::create_dir_all(output_dir)?;
-
-        // Create filename: skill_test_timestamp.log
-        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-        let filename = format!("{}_{}_{}.log", desc.skill_name, desc.test_name, timestamp);
-        let dest_path = output_dir.join(&filename);
-
-        // Copy log file
-        std::fs::copy(log_path, &dest_path)?;
-
-        info!("Log saved to: {}", dest_path.display());
-        Ok(())
-    }
-
     /// Execute Claude CLI
-    fn execute_claude(&self, workspace: &TestWorkspace, test: &TestCase) -> Result<()> {
+    fn execute_claude(
+        &self,
+        workspace: &TestWorkspace,
+        test: &TestCase,
+        log_path: &PathBuf,
+    ) -> Result<()> {
         let timeout = Duration::from_secs(test.timeout);
         let test_start = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -276,7 +263,7 @@ impl TestExecutor {
             .map_err(|e| anyhow::anyhow!("Failed to spawn claude: {}", e))?;
 
         // Open log file for writing with timestamps
-        let log_file = std::fs::File::create(workspace.log_path())?;
+        let log_file = std::fs::File::create(log_path)?;
         let mut log_writer = std::io::BufWriter::new(log_file);
 
         // Get stdout reader
