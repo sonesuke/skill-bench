@@ -12,6 +12,7 @@ pub struct TestWorkspace {
     #[allow(dead_code)]
     pub temp_dir: TempDir,
     pub work_dir: PathBuf,
+    #[allow(dead_code)]
     pub log_file: PathBuf,
     #[allow(dead_code)]
     pub timestamp: String,
@@ -94,6 +95,7 @@ impl TestWorkspace {
     }
 
     /// Get the log file path
+    #[allow(dead_code)]
     pub fn log_path(&self) -> &Path {
         &self.log_file
     }
